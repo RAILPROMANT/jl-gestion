@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404131148 -->
+<!-- JL Gestion v20260404134657 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1083,6 +1083,7 @@ function iniciarApp() {
         try { gpRenderHist(); } catch(e) {}
         try { gpSegRender(); } catch(e) {}
         try { rDash(); } catch(e) {}
+        try { gpPopulateCliSel(); } catch(e) {}
       });
     });
   }).catch(function() {
@@ -1692,6 +1693,29 @@ function gpSv() {
   var d = { params: GP.params, historial: GP.historial, nroActual: GP.nroActual };
   try { localStorage.setItem('jl_gp', JSON.stringify(d)); } catch(e) {}
   try { DB.ref(FB_GP_PATH).set(d); } catch(e) {}
+}
+
+function gpLoad() {
+  try {
+    var d = JSON.parse(localStorage.getItem('jl_gp') || 'null');
+    if (d) {
+      if (d.params) GP.params = d.params;
+      if (d.historial) GP.historial = d.historial;
+      if (d.nroActual) GP.nroActual = d.nroActual;
+    }
+  } catch(x) {}
+}
+
+function gpRenderItems() {
+  var tbody = el('gp-tbl'); if (!tbody) return;
+  tbody.innerHTML = GP.items.map(function(it, i) {
+    return '<tr>' +
+      '<td><input type="text" class="gp-concepto" data-i="' + i + '" value="' + (it.concepto||'') + '" style="min-width:180px"></td>' +
+      '<td><input type="text" class="gp-detalle" data-i="' + i + '" value="' + (it.detalle||'') + '" style="min-width:150px" placeholder="Detalle..."></td>' +
+      '<td><input type="number" class="gp-importe" data-i="' + i + '" value="' + (it.importe||0) + '" min="0"></td>' +
+      '<td><button class="btn btns btnd gp-del" data-i="' + i + '">✕</button></td></tr>';
+  }).join('');
+  if (typeof gpRenderResumen === 'function') gpRenderResumen();
 }
 
 function gpCalc(cd) {
