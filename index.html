@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404050317 -->
+<!-- JL Gestion v20260404051453 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1068,39 +1068,28 @@ function iniciarApp() {
       var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
       reBuild(); renderAll();
       // Poll Firebase every 20 seconds for real-time updates
+      // ── Sincronización Firebase cada 10 segundos ──
+      var _lastGPHash = '';
+      var _lastDataHash = '';
       function fbPoll() {
-        // Always load fresh data from Firebase - no comparison tricks
-        DB.ref(FB_GP_PATH).once('value').then(function(s) {
-          var d = s.val(); if (!d) return;
-          var changed = false;
-          if (d.nroActual && d.nroActual !== GP.nroActual) changed = true;
-          if (d.historial && d.historial.length !== GP.historial.length) changed = true;
-          if (changed) {
-            if (d.params) GP.params = d.params;
-            if (d.historial) GP.historial = d.historial;
-            if (d.nroActual) GP.nroActual = d.nroActual;
-            var gnro = el('gp-nro');
-            if (gnro && gnro !== document.activeElement) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
-            try { gpRenderHist(); } catch(e) {}
-            try { gpSegRender(); } catch(e) {}
-            try { rDash(); } catch(e) {}
+        DB.ref(FB_GP_PATH).once('value').then(function(snap) {
+          var d = snap.val(); if (!d || !d.historial) return;
+          var hash = d.nroActual + '_' + d.historial.length;
+          if (hash === _lastGPHash) return;
+          _lastGPHash = hash;
+          GP.params = d.params || GP.params;
+          GP.historial = d.historial || [];
+          GP.nroActual = d.nroActual || 1;
+          var gnro = el('gp-nro');
+          if (gnro && gnro !== document.activeElement) {
+            gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
           }
-        }).catch(function() {});
-        DB.ref(FB_PATH).once('value').then(function(s) {
-          var d = s.val(); if (!d) return;
-          var localProvCount = S.proveedores ? S.proveedores.length : 0;
-          var fbProvCount = d.proveedores ? d.proveedores.length : 0;
-          var localEmpCount = S.emp ? S.emp.length : 0;
-          var fbEmpCount = d.emp ? d.emp.length : 0;
-          if (fbProvCount !== localProvCount || fbEmpCount !== localEmpCount) {
-            loadData(d);
-            try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
-            try { rDash(); } catch(e) {}
-            try { reBuild(); } catch(e) {}
-          }
+          try { gpRenderHist(); } catch(e) {}
+          try { gpSegRender(); } catch(e) {}
+          try { rDash(); } catch(e) {}
         }).catch(function() {});
       }
-      setInterval(fbPoll, 15000);
+      setInterval(fbPoll, 10000);
     });
   }).catch(function() {
     try { var s = localStorage.getItem('jl_data'); if (s) loadData(JSON.parse(s)); } catch(e) {}
@@ -1720,56 +1709,6 @@ function gpCalc(cd) {
   return { imp: imp, adm: adm, ing: ing, comi: comi, sub1: sub1, rv: rv, sub2: sub2, re: re, rjl: rjl, rrp: rrp, sub3: sub3, impD: impD, total: total, totalUSD: total / p.dolar };
 }
 
-function gpRenderItems() {
-  var tbody = el('gp-tbl'); if (!tbody) return;
-  tbody.innerHTML = GP.items.map(function(it, i) {
-    return '<tr>' +
-      '<td><input type="text" class="gp-concepto" data-i="' + i + '" value="' + it.concepto + '" style="min-width:180px"></td>' +
-      '<td><input type="text" class="gp-detalle" data-i="' + i + '" value="' + it.detalle + '" style="min-width:150px" placeholder="Detalle..."></td>' +
-      '<td><input type="number" class="gp-importe" data-i="' + i + '" value="' + it.importe + '" min="0"></td>' +
-      '<td><button class="btn btns btnd gp-del" data-i="' + i + '">\u2715</button></td></tr>';
-  }).join('');
-  gpRenderResumen();
-}
-
-function gpRenderResumen() {
-  var cd = GP.items.reduce(function(a, it) { return a + it.importe; }, 0);
-  var e = el('gp-cd'); if (e) e.textContent = $f(cd);
-  var c = gpCalc(cd);
-  var res = el('gp-res'), result = el('gp-result'); if (!res || !result) return;
-  function row(l, v, color) { return '<div class="trow"><span>' + l + '</span><span' + (color ? ' style="color:' + color + '"' : '') + '>' + $f(v) + '</span></div>'; }
-  res.innerHTML = '<div class="totbox">' + row('Costo directo', cd) + row('Imprevistos (' + GP.params.imp + '%)', c.imp) + row('Administrativo (' + GP.params.adm + '%)', c.adm) + row('Mensual ingeniero', c.ing) + row('Comisi\u00f3n ingeniero (' + GP.params.comiIng + '%)', c.comi) + '<div class="trow fin"><span>Subtotal 1</span><span>' + $f(c.sub1) + '</span></div></div>' +
-    '<div class="totbox">' + row('Renta venta obra (' + GP.params.rVenta + '%)', c.rv) + '<div class="trow fin"><span>Subtotal 2</span><span>' + $f(c.sub2) + '</span></div>' + row('Renta empresa (' + GP.params.rEmpresa + '%)', c.re) + '<div style="padding-left:12px">' + row('\u2192 Renta JL (' + GP.params.rJL + '%)', c.rjl, 'var(--grn)') + '</div><div style="padding-left:12px">' + row('\u2192 Renta Railpro (' + GP.params.rRailpro + '%)', c.rrp, 'var(--blu)') + '</div>' + '<div class="trow fin"><span>Subtotal 3</span><span>' + $f(c.sub3) + '</span></div>' + row('Impuestos directos (' + GP.params.impDirectos + '%)', c.impD) + '</div>';
-  result.innerHTML = '<div class="totbox"><div style="text-align:center;padding:14px 0"><div style="font-size:11px;color:var(--txm);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Valor total de obra</div><div style="font-size:28px;font-weight:800;color:var(--red2);letter-spacing:-1px">' + $f(c.total) + '</div><div style="font-size:13px;color:var(--txm);margin-top:6px">ARS</div></div>' +
-    '<div style="border-top:1px solid var(--br);padding-top:12px;margin-top:4px;text-align:center"><div style="font-size:11px;color:var(--txm);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">Equivalente USD</div><div style="font-size:20px;font-weight:700;color:var(--grn)">USD ' + Math.round(c.totalUSD).toLocaleString('es-AR') + '</div><div style="font-size:11px;color:var(--txm);margin-top:4px">TC: $ ' + GP.params.dolar.toLocaleString('es-AR') + '</div></div>' +
-    '<div style="border-top:1px solid var(--br);padding-top:12px;margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--txm)">Renta JL</span><span style="color:var(--grn);font-weight:600">' + $f(c.rjl) + '</span></div><div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--txm)">Renta Railpro</span><span style="color:var(--blu);font-weight:600">' + $f(c.rrp) + '</span></div></div></div>';
-}
-
-function gpLimpiar() {
-  if (!confirm('\u00bfLimpiar todos los \u00edtems?')) return;
-  GP.items = [{ concepto: 'T\u00e9cnico / Direcci\u00f3n de obra', detalle: '', importe: 0 }, { concepto: 'Operarios', detalle: '', importe: 0 }, { concepto: 'T\u00e9cnico seguridad', detalle: '', importe: 0 }, { concepto: 'Herramientas', detalle: '', importe: 0 }, { concepto: 'Nafta', detalle: '', importe: 0 }, { concepto: 'Mechas', detalle: '', importe: 0 }, { concepto: 'Viandas', detalle: '', importe: 0 }, { concepto: 'Agua', detalle: '', importe: 0 }];
-  el('gp-cli').value = ''; el('gp-obra').value = '';
-  el('gp-nro').value = 'P-' + String(GP.nroActual).padStart(5, '0'); el('gp-fec').value = td();
-  gpRenderItems();
-}
-
-// gpGuardar defined in DOMContentLoaded block
-
-function gpRenderHist() {
-  var div = el('gp-hist'); if (!div) return;
-  if (!GP.historial.length) { div.innerHTML = '<div class="empty">Sin presupuestos guardados.</div>'; return; }
-  div.innerHTML = GP.historial.map(function(p) {
-    return '<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><div><div style="font-weight:700;font-size:14px">' + p.nro + ' \u2014 ' + p.cliente + '</div><div style="font-size:12px;color:var(--txm);margin-top:2px">' + p.obra + ' \u00b7 ' + p.fecha + '</div></div><div style="display:flex;gap:8px;align-items:center"><div style="text-align:right"><div style="font-size:11px;color:var(--txm)">Total</div><div style="font-weight:700;color:var(--red2)">' + $f(p.total) + '</div></div><button class="btn btns gp-load" data-id="' + p.id + '">Cargar</button><button class="btn btns btnd gp-del-hist" data-id="' + p.id + '">\u2715</button></div></div></div>';
-  }).join('');
-}
-
-function gpCargar(id) {
-  var p = GP.historial.find(function(x) { return x.id === id; }); if (!p) return;
-  el('gp-cli').value = p.cliente; el('gp-obra').value = p.obra || ''; el('gp-nro').value = p.nro; el('gp-fec').value = p.fecha;
-  GP.items = p.items.slice(); GP.params = Object.assign({}, p.params);
-  goSub('gpres-form'); gpRenderItems(); gpLoadParams();
-}
-
 function gpLoadParams() {
   var p = GP.params;
   el('gpp-imp').value = p.imp; el('gpp-adm').value = p.adm; el('gpp-ing').value = p.ingMensual;
@@ -1788,48 +1727,6 @@ function gpSaveParams() {
   gpSv(); alert('Par\u00e1metros guardados.');
 }
 
-function gpPDF() {
-  var cli = el('gp-cli').value.trim() || '\u2014', obra = el('gp-obra').value.trim() || '';
-  var nro = el('gp-nro').value || 'P-0001', fecha = el('gp-fec').value || td();
-  var cd = GP.items.reduce(function(a, it) { return a + it.importe; }, 0);
-  var c = gpCalc(cd), p = GP.params;
-  var logo = '<svg viewBox="0 0 110 76" fill="none" xmlns="http://www.w3.org/2000/svg" width="85" height="58"><path d="M 18 52 C 8 44 6 30 18 20 C 28 12 46 8 62 10" stroke="#5a6070" stroke-width="7" stroke-linecap="round" fill="none"/><path d="M 48 66 C 68 72 90 66 98 54 C 106 42 100 26 84 18" stroke="#dc2626" stroke-width="7" stroke-linecap="round" fill="none"/><text x="22" y="57" font-family="Arial" font-weight="900" font-size="42" fill="#dc2626" letter-spacing="-2">J</text><text x="54" y="57" font-family="Arial" font-weight="900" font-size="42" fill="#5a6070" letter-spacing="-2">L</text></svg>';
-  var foot = '<div style="background:#4b5563;color:#fff;padding:14px 44px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px"><div style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#e5e7eb">JL Mantenimiento Ferroviario e Industrial</div><div style="display:flex;gap:18px;font-size:10px;color:#d1d5db"><span>jlanda.serviciosgenerales@gmail.com</span><span>+54 2262 230306</span><span>Rub\u00e9n D\u00edaz 467, Aldao, Sta Fe</span></div></div>';
-  function fRow(l, v, bold, color) { return '<tr' + (bold ? ' style="border-top:2px solid #e5e7eb"' : '') + '><td style="padding:6px 12px;font-size:13px;color:#374151' + (bold ? ';font-weight:700' : '') + '">' + l + '</td><td style="padding:6px 12px;font-size:13px;text-align:right;font-weight:' + (bold ? '700' : '500') + ';color:' + (color || '#111') + '">' + $f(v) + '</td></tr>'; }
-  var itemRows = GP.items.filter(function(it) { return it.importe > 0 || it.concepto; }).map(function(it) {
-    return '<tr><td style="padding:7px 12px;border:1px solid #e5e7eb;font-size:13px">' + it.concepto + '</td><td style="padding:7px 12px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">' + it.detalle + '</td><td style="padding:7px 12px;border:1px solid #e5e7eb;font-size:13px;text-align:right;font-weight:600">' + $f(it.importe) + '</td></tr>';
-  }).join('');
-  var html = '<style>@page{margin:10mm;size:A4}body{margin:0;padding:0}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.pp{width:100%;background:#fff}.pb{padding:24px 36px}</style>' +
-    '<div class="pp"><div class="pb"><div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:4px solid #dc2626;margin-bottom:28px"><div><div style="font-size:44px;font-weight:900;letter-spacing:-1px;color:#111;line-height:1">PRESUPUESTO</div><div style="font-size:13px;color:#555;margin-top:8px">N\u00b0: ' + nro + '</div><div style="font-size:13px;color:#555;margin-top:2px">' + fecha + '</div></div><div style="text-align:right">' + logo + '<div style="font-size:9px;font-weight:700;color:#5a6070;letter-spacing:1px;text-transform:uppercase;margin-top:4px">MANTENIMIENTO FERROVIARIO E INDUSTRIAL</div></div></div>' +
-    '<div style="padding-bottom:20px;border-bottom:1px solid #e5e7eb;margin-bottom:22px"><div style="font-size:16px;font-weight:700;font-family:Courier New,monospace">Cliente: ' + cli + '</div>' + (obra ? '<div style="font-size:14px;color:#444;margin-top:4px">Obra: ' + obra + '</div>' : '') + '</div>' +
-    '<div style="margin-bottom:22px"><div style="font-size:15px;font-weight:700;margin-bottom:10px">Detalle de \u00edtems</div><table style="width:100%;border-collapse:collapse"><thead><tr><th style="padding:8px 12px;background:#1a1a1a;color:#fff;text-align:left;font-size:12px;border:1px solid #1a1a1a">Concepto</th><th style="padding:8px 12px;background:#1a1a1a;color:#fff;text-align:left;font-size:12px;border:1px solid #1a1a1a;width:180px">Detalle</th><th style="padding:8px 12px;background:#1a1a1a;color:#fff;text-align:right;font-size:12px;border:1px solid #1a1a1a;width:140px">Importe</th></tr></thead><tbody>' + itemRows + '</tbody></table></div>' +
-    '<div style="margin-bottom:22px"><div style="font-size:15px;font-weight:700;margin-bottom:10px">Composici\u00f3n del precio</div><table style="width:100%;border-collapse:collapse;background:#f9fafb"><tbody>' +
-    fRow('Costo directo', cd, false, '#111') + fRow('Imprevistos (' + p.imp + '%)', c.imp) + fRow('Administrativo (' + p.adm + '%)', c.adm) + fRow('Mensual ingeniero', c.ing) + fRow('Comisi\u00f3n ingeniero (' + p.comiIng + '%)', c.comi) +
-    fRow('Subtotal 1', c.sub1, true) + fRow('Renta de venta de obra (' + p.rVenta + '%)', c.rv) + fRow('Subtotal 2', c.sub2, true) +
-    fRow('Renta empresa (' + p.rEmpresa + '%)', c.re) + fRow('\u2192 Renta JL (' + p.rJL + '%)', c.rjl, false, '#166534') + fRow('\u2192 Renta Railpro (' + p.rRailpro + '%)', c.rrp, false, '#1d4ed8') +
-    fRow('Subtotal 3', c.sub3, true) + fRow('Impuestos directos (' + p.impDirectos + '%)', c.impD) +
-    '</tbody></table></div>' +
-    '<div style="border:2px solid #374151;border-radius:8px;padding:20px 28px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:20px;font-weight:900">TOTAL OBRA:</div><div style="text-align:right"><div style="font-size:26px;font-weight:900;color:#dc2626">' + $f(c.total) + ' + IVA</div><div style="font-size:14px;color:#6b7280;margin-top:4px">USD ' + Math.round(c.totalUSD).toLocaleString('es-AR') + ' (TC: $' + p.dolar + ')</div></div></div>' +
-    '</div>' + foot + '</div>';
-  var ifr = document.getElementById('_pifr');
-  if (!ifr) {
-    ifr = document.createElement('iframe');
-    ifr.id = '_pifr';
-    ifr.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999';
-    document.body.appendChild(ifr);
-  }
-  ifr.style.display = 'block';
-  var d = ifr.contentWindow.document;
-  d.open(); d.write(html); d.close();
-  setTimeout(function() {
-    ifr.contentWindow.print();
-    setTimeout(function() { ifr.style.display = 'none'; }, 3000);
-  }, 700);
-}
-
-// ═══════════════════════════════════════
-// CONFIGURACIÓN
-// ═══════════════════════════════════════
 function rCfg() {
   var cc = el('cfg-cats');
   if (cc) cc.innerHTML = '<div class="tlist">' + S.rates.map(function(r, i) { return '<div class="titem"><span style="font-weight:500">' + r.l + '</span><span class="tdel del-cat" data-i="' + i + '">\u2715</span></div>'; }).join('') + '</div><div class="tadd"><input type="text" id="cfg-cn" placeholder="Nueva categor\u00eda..." style="flex:1"><button class="btn btns btnp" id="btn-add-cat">+ Agregar</button></div><p style="font-size:11px;color:var(--txm);margin-top:8px">Para editar costos ir a Personal \u2192 Tarifas.</p>';
@@ -1844,6 +1741,8 @@ function rCfg() {
 // ═══════════════════════════════════════
 // EVENT DELEGATION — único lugar donde se registran TODOS los eventos
 // ═══════════════════════════════════════
+
+
 /* gpPreview y gpGenerarPDF se exponen globalmente desde dentro de DOMContentLoaded */
 
 document.addEventListener('DOMContentLoaded', function() {
