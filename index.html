@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404043100 -->
+<!-- JL Gestion v20260404050317 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1690,7 +1690,7 @@ function renderOC() {
 // ═══════════════════════════════════════
 // GEN PRESUPUESTO
 // ═══════════════════════════════════════
-var GP = {
+var GP = window.GP = {
   items: [
     { concepto: 'T\u00e9cnico / Direcci\u00f3n de obra', detalle: '', importe: 0 },
     { concepto: 'Operarios', detalle: '', importe: 0 },
@@ -2025,14 +2025,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // Search inputs (input event, not change)
 
   // ═══ GP ═══
-    if (!window.GP) window.GP = {items:[{concepto:'Dirección de obra',cantidad:1,precio:400000,detalle:'',importe:400000},{concepto:'Operarios',cantidad:1,precio:779544,detalle:'',importe:779544},{concepto:'Técnico seg',cantidad:1,precio:350000,detalle:'',importe:350000},{concepto:'Herramientas',cantidad:4,precio:200000,detalle:'4x200.000',importe:800000},{concepto:'Nafta',cantidad:12,precio:2000,detalle:'12x2.000',importe:24000},{concepto:'Mechas',cantidad:3,precio:26000,detalle:'3x26.000',importe:78000},{concepto:'Viandas',cantidad:8,precio:8500,detalle:'8x8.500',importe:68000},{concepto:'Agua',cantidad:7,precio:6000,detalle:'7x6.000',importe:42000}],params:{imp:10,adm:5,ingMensual:1200000,comiIng:1,rVenta:3,rEmpresa:40,rJL:75,rRailpro:25,impDirectos:26,dolar:1454.08,dias:22},historial:[],nroActual:1};
+    // GP already defined globally
+
   var GP = window.GP;
-  function gpSv(){
-    var d={params:GP.params,historial:GP.historial,nroActual:GP.nroActual};
-    try{localStorage.setItem('jl_gp',JSON.stringify(d));}catch(x){}
-    try{if(typeof DB!=='undefined')DB.ref('jl_gp').set(d);}catch(x){}
-  }
-  function gpLoad(){try{var d=JSON.parse(localStorage.getItem('jl_gp')||'null');if(d){if(d.params)GP.params=d.params;if(d.historial)GP.historial=d.historial;if(d.nroActual)GP.nroActual=d.nroActual;}}catch(x){}}
+  // gpSv defined globally
+  // gpLoad defined globally
   function gpCalc(cd){var p=GP.params,imp=cd*(p.imp/100),adm=cd*(p.adm/100),ing=p.ingMensual/p.dias,comi=cd*(p.comiIng/100),sub1=cd+imp+adm+ing+comi,rv=sub1*(p.rVenta/100),sub2=sub1+rv,re=sub2*(p.rEmpresa/100),rjl=re*(p.rJL/100),rrp=re*(p.rRailpro/100),sub3=sub2+re,impD=sub3*(p.impDirectos/100),total=sub3+impD;return{imp:imp,adm:adm,ing:ing,comi:comi,sub1:sub1,rv:rv,sub2:sub2,re:re,rjl:rjl,rrp:rrp,sub3:sub3,impD:impD,total:total,totalUSD:total/p.dolar};}
   function gpResumen(){var cd=GP.items.reduce(function(a,it){return a+(it.importe||0);},0);var ecd=el('gp-cd');if(ecd)ecd.textContent=$f(cd);var calc=gpCalc(cd),res=el('gp-res'),result=el('gp-result');if(!res||!result)return;function row(l,v,col){return '<div class="trow"><span>'+l+'</span><span'+(col?' style="color:'+col+'"':'')+'>'+$f(v)+'</span></div>';}res.innerHTML='<div class="totbox">'+row('Costo directo',cd)+row('Imprevistos',calc.imp)+row('Administrativo',calc.adm)+row('Mensual ing.',calc.ing)+row('Comisión',calc.comi)+'<div class="trow fin"><span>Subtotal 1</span><span>'+$f(calc.sub1)+'</span></div></div><div class="totbox">'+row('Renta venta',calc.rv)+'<div class="trow fin"><span>Subtotal 2</span><span>'+$f(calc.sub2)+'</span></div>'+row('Renta empresa',calc.re)+'<div style="padding-left:12px">'+row('→ JL',calc.rjl,'var(--grn)')+'</div><div style="padding-left:12px">'+row('→ Railpro',calc.rrp,'var(--blu)')+'</div><div class="trow fin"><span>Subtotal 3</span><span>'+$f(calc.sub3)+'</span></div>'+row('Impuestos',calc.impD)+'</div>';result.innerHTML='<div class="totbox"><div style="text-align:center;padding:14px 0"><div style="font-size:11px;color:var(--txm);text-transform:uppercase;margin-bottom:8px">Valor total</div><div style="font-size:28px;font-weight:800;color:var(--red2)">'+$f(calc.total)+'</div></div><div style="border-top:1px solid var(--br);padding-top:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--grn)">USD '+Math.round(calc.totalUSD).toLocaleString('es-AR')+'</div></div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--txm)">Renta JL</span><span style="color:var(--grn);font-weight:600">'+$f(calc.rjl)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--txm)">Renta Railpro</span><span style="color:var(--blu);font-weight:600">'+$f(calc.rrp)+'</span></div></div></div>';}
   function gpRenderTable(){var tbody=el('gp-tbl');if(!tbody)return;var html='';GP.items.forEach(function(it,i){var imp=(parseFloat(it.cantidad)||0)*(parseFloat(it.precio)||0);GP.items[i].importe=imp;html+='<tr data-i="'+i+'"><td><input type="text" class="gpv-conc" value="'+(it.concepto||'').replace(/"/g,'&quot;')+'" style="min-width:130px"></td><td><input type="number" class="gpv-cant" value="'+(it.cantidad||1)+'" min="0" style="width:60px;text-align:right"></td><td><input type="number" class="gpv-prec" value="'+(it.precio||0)+'" min="0" style="width:100px;text-align:right"></td><td><input type="text" class="gpv-det" value="'+(it.detalle||'').replace(/"/g,'&quot;')+'" style="min-width:100px"></td><td class="gpv-imp" style="text-align:right;font-weight:600">'+$f(imp)+'</td><td><button class="btn btns btnd gpv-del">\u2715</button></td></tr>';});tbody.innerHTML=html;Array.from(tbody.rows).forEach(function(row){var i=parseInt(row.dataset.i);function rc(){GP.items[i].cantidad=parseFloat(row.querySelector('.gpv-cant').value)||0;GP.items[i].precio=parseFloat(row.querySelector('.gpv-prec').value)||0;GP.items[i].importe=GP.items[i].cantidad*GP.items[i].precio;row.querySelector('.gpv-imp').textContent=$f(GP.items[i].importe);gpResumen();}row.querySelector('.gpv-cant').addEventListener('input',rc);row.querySelector('.gpv-prec').addEventListener('input',rc);row.querySelector('.gpv-conc').addEventListener('input',function(){GP.items[i].concepto=this.value;});row.querySelector('.gpv-det').addEventListener('input',function(){GP.items[i].detalle=this.value;});row.querySelector('.gpv-del').addEventListener('click',function(){GP.items.splice(i,1);gpRenderTable();});});gpResumen();}
