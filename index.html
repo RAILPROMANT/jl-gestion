@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404051453 -->
+<!-- JL Gestion v20260404131148 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1067,29 +1067,23 @@ function iniciarApp() {
       if (dg) { if (dg.params) GP.params = dg.params; if (dg.historial) GP.historial = dg.historial; if (dg.nroActual) GP.nroActual = dg.nroActual; }
       var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
       reBuild(); renderAll();
-      // Poll Firebase every 20 seconds for real-time updates
-      // ── Sincronización Firebase cada 10 segundos ──
-      var _lastGPHash = '';
-      var _lastDataHash = '';
-      function fbPoll() {
-        DB.ref(FB_GP_PATH).once('value').then(function(snap) {
-          var d = snap.val(); if (!d || !d.historial) return;
-          var hash = d.nroActual + '_' + d.historial.length;
-          if (hash === _lastGPHash) return;
-          _lastGPHash = hash;
-          GP.params = d.params || GP.params;
-          GP.historial = d.historial || [];
-          GP.nroActual = d.nroActual || 1;
-          var gnro = el('gp-nro');
-          if (gnro && gnro !== document.activeElement) {
-            gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
-          }
-          try { gpRenderHist(); } catch(e) {}
-          try { gpSegRender(); } catch(e) {}
-          try { rDash(); } catch(e) {}
-        }).catch(function() {});
-      }
-      setInterval(fbPoll, 10000);
+      // Firebase realtime listener - se dispara cada vez que cambian los datos
+      var _initialLoad = true;
+      DB.ref(FB_GP_PATH).on('value', function(snap) {
+        var d = snap.val();
+        if (!d) return;
+        if (_initialLoad) { _initialLoad = false; return; } // skip first load, already loaded above
+        if (d.params) GP.params = d.params;
+        if (d.historial) GP.historial = d.historial;
+        if (d.nroActual) GP.nroActual = d.nroActual;
+        var gnro = el('gp-nro');
+        if (gnro && gnro !== document.activeElement) {
+          gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
+        }
+        try { gpRenderHist(); } catch(e) {}
+        try { gpSegRender(); } catch(e) {}
+        try { rDash(); } catch(e) {}
+      });
     });
   }).catch(function() {
     try { var s = localStorage.getItem('jl_data'); if (s) loadData(JSON.parse(s)); } catch(e) {}
@@ -1939,10 +1933,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if(!nro&&!cli){alert('Completá N° o Cliente.');return;}
     var cd=GP.items.reduce(function(a,it){return a+it.importe;},0);
     GP.historial.unshift({id:uid(),fecha:new Date().toLocaleDateString('es-AR'),nro:nro,cliente:cli,obra:el('gp-obra')?el('gp-obra').value.trim():'',total:gpCalc(cd).total,estado:'Pendiente de respuesta',motivoRechazo:'',nroOC:'',pctOC:0,pctAvance:0,pctCobro:0,items:JSON.parse(JSON.stringify(GP.items)),params:JSON.parse(JSON.stringify(GP.params))});
-    // Extraer número del nro actual y avanzar al siguiente
-    var match = nro.replace(/[^0-9]/g,'');
-    var num = match ? parseInt(match, 10) : GP.nroActual;
-    if (num >= GP.nroActual) GP.nroActual = num + 1;
+    GP.nroActual++;
     gpSv();
     // Limpiar form y poner próximo número automáticamente
     GP.items=[{concepto:'',cantidad:1,precio:0,detalle:'',importe:0}];
