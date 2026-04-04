@@ -1055,10 +1055,15 @@ function iniciarApp() {
         var d = s.val(); if (!d) return;
         loadData(d); try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
         reBuild(); renderAll();
+        // Also refresh GP-related UI since rDash needs GP data
+        rDash();
       });
       DB.ref(FB_GP_PATH).on('value', function(s) {
         var d = s.val(); if (!d) return;
-        if (d.params) GP.params = d.params; if (d.historial) GP.historial = d.historial; if (d.nroActual) GP.nroActual = d.nroActual;
+        if (d.params) GP.params = d.params;
+        if (d.historial) GP.historial = d.historial;
+        if (d.nroActual) GP.nroActual = d.nroActual;
+        var gnro = el('gp-nro'); if (gnro && gnro !== document.activeElement) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
         gpRenderHist(); gpSegRender(); rDash();
       });
     });
@@ -1963,7 +1968,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // Search inputs (input event, not change)
 
   // ═══ GP ═══
-  var GP={items:[{concepto:'Dirección de obra',cantidad:1,precio:400000,detalle:'',importe:400000},{concepto:'Operarios',cantidad:1,precio:779544,detalle:'',importe:779544},{concepto:'Técnico seg',cantidad:1,precio:350000,detalle:'',importe:350000},{concepto:'Herramientas',cantidad:4,precio:200000,detalle:'4x200.000',importe:800000},{concepto:'Nafta',cantidad:12,precio:2000,detalle:'12x2.000',importe:24000},{concepto:'Mechas',cantidad:3,precio:26000,detalle:'3x26.000',importe:78000},{concepto:'Viandas',cantidad:8,precio:8500,detalle:'8x8.500',importe:68000},{concepto:'Agua',cantidad:7,precio:6000,detalle:'7x6.000',importe:42000}],params:{imp:10,adm:5,ingMensual:1200000,comiIng:1,rVenta:3,rEmpresa:40,rJL:75,rRailpro:25,impDirectos:26,dolar:1454.08,dias:22},historial:[],nroActual:1};
+    if (!window.GP) window.GP = {items:[{concepto:'Dirección de obra',cantidad:1,precio:400000,detalle:'',importe:400000},{concepto:'Operarios',cantidad:1,precio:779544,detalle:'',importe:779544},{concepto:'Técnico seg',cantidad:1,precio:350000,detalle:'',importe:350000},{concepto:'Herramientas',cantidad:4,precio:200000,detalle:'4x200.000',importe:800000},{concepto:'Nafta',cantidad:12,precio:2000,detalle:'12x2.000',importe:24000},{concepto:'Mechas',cantidad:3,precio:26000,detalle:'3x26.000',importe:78000},{concepto:'Viandas',cantidad:8,precio:8500,detalle:'8x8.500',importe:68000},{concepto:'Agua',cantidad:7,precio:6000,detalle:'7x6.000',importe:42000}],params:{imp:10,adm:5,ingMensual:1200000,comiIng:1,rVenta:3,rEmpresa:40,rJL:75,rRailpro:25,impDirectos:26,dolar:1454.08,dias:22},historial:[],nroActual:1};
+  var GP = window.GP;
   function gpSv(){
     var d={params:GP.params,historial:GP.historial,nroActual:GP.nroActual};
     try{localStorage.setItem('jl_gp',JSON.stringify(d));}catch(x){}
