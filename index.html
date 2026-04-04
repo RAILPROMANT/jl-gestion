@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404032618 -->
+<!-- JL Gestion v20260404041015 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -589,6 +589,14 @@ select option{background:var(--bg2)}
 
     <div id="cfg" class="page">
       <div style="font-size:13px;color:var(--txm);margin-bottom:14px">Gestion&#225; todos los men&#250;s desplegables del sistema.</div>
+      <div class="card" style="margin-bottom:14px;border-top:3px solid var(--red)">
+        <div class="sttl">Sincronizaci&#243;n Firebase</div>
+        <p style="font-size:12px;color:var(--txm);margin-bottom:12px">Si los datos de esta PC no coinciden con otros dispositivos, us&#225; este bot&#243;n para subir todo a Firebase.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btnp" id="btn-sync-firebase" onclick="sincronizarFirebase()">&#8679; Subir todo a Firebase</button>
+          <span id="sync-status" style="font-size:12px;color:var(--txm)"></span>
+        </div>
+      </div>
       <div class="two">
         <div>
           <div class="card"><div class="sttl">Categor&#237;as de personal</div><p style="font-size:12px;color:var(--txm);margin-bottom:12px">Los valores de costo/venta se editan en Personal &#8594; Tarifas.</p><div id="cfg-cats"></div></div>
@@ -604,6 +612,14 @@ select option{background:var(--bg2)}
     <!-- PRESUPUESTO JL -->
     <div id="cfg" class="page">
       <div style="font-size:13px;color:var(--txm);margin-bottom:14px">Gestion&#225; todos los men&#250;s desplegables del sistema.</div>
+      <div class="card" style="margin-bottom:14px;border-top:3px solid var(--red)">
+        <div class="sttl">Sincronizaci&#243;n Firebase</div>
+        <p style="font-size:12px;color:var(--txm);margin-bottom:12px">Si los datos de esta PC no coinciden con otros dispositivos, us&#225; este bot&#243;n para subir todo a Firebase.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btnp" onclick="sincronizarFirebase()">&#8679; Subir todo a Firebase</button>
+          <span id="sync-status2" style="font-size:12px;color:var(--txm)"></span>
+        </div>
+      </div>
       <div class="two">
         <div>
           <div class="card"><div class="sttl">Categor&#237;as de personal</div><p style="font-size:12px;color:var(--txm);margin-bottom:12px">Los valores de costo/venta se editan en Personal &#8594; Tarifas.</p><div id="cfg-cats"></div></div>
@@ -1132,6 +1148,28 @@ function reBuild() {
 }
 
 function renderAll() { reBuild(); rDash(); rPers(); rPres(); rMat(); renderProv(); rStats(); rCfg(); }
+
+function sincronizarFirebase() {
+  var st = el('sync-status') || el('sync-status2');
+  if (st) st.textContent = 'Subiendo...';
+  var data = _exp();
+  DB.ref(FB_PATH).set(data).then(function() {
+    var gp = { params: GP.params, historial: GP.historial, nroActual: GP.nroActual };
+    return DB.ref(FB_GP_PATH).set(gp);
+  }).then(function() {
+    var st1 = el('sync-status'), st2 = el('sync-status2');
+    if (st1) st1.textContent = '✓ Sincronizado correctamente';
+    if (st2) st2.textContent = '✓ Sincronizado correctamente';
+    setTimeout(function() {
+      if (st1) st1.textContent = '';
+      if (st2) st2.textContent = '';
+    }, 3000);
+  }).catch(function(e) {
+    var st1 = el('sync-status'), st2 = el('sync-status2');
+    if (st1) st1.textContent = 'Error: ' + e.message;
+    if (st2) st2.textContent = 'Error: ' + e.message;
+  });
+}
 
 // ═══════════════════════════════════════
 // HELPERS
