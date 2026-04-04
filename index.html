@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v202604040246282 -->
+<!-- JL Gestion v20260404032618 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1051,22 +1051,40 @@ function iniciarApp() {
       if (dg) { if (dg.params) GP.params = dg.params; if (dg.historial) GP.historial = dg.historial; if (dg.nroActual) GP.nroActual = dg.nroActual; }
       var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
       reBuild(); renderAll();
-      // Listen for real-time changes from other users
-      DB.ref(FB_PATH).on('value', function(s) {
-        var d = s.val(); if (!d) return;
-        loadData(d); try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
-        // Solo actualizar lo que siempre existe en el DOM
-        try { rDash(); } catch(e) {}
-        try { reBuild(); } catch(e) {}
-      });
-      DB.ref(FB_GP_PATH).on('value', function(s) {
-        var d = s.val(); if (!d) return;
-        if (d.params) GP.params = d.params;
-        if (d.historial) GP.historial = d.historial;
-        if (d.nroActual) GP.nroActual = d.nroActual;
-        var gnro = el('gp-nro'); if (gnro && gnro !== document.activeElement) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
-        gpRenderHist(); gpSegRender(); rDash();
-      });
+      // Poll Firebase every 20 seconds for real-time updates
+      function fbPoll() {
+        DB.ref(FB_PATH).once('value').then(function(s) {
+          var d = s.val(); if (!d) return;
+          var localStr = localStorage.getItem('jl_data');
+          var localHash = localStr ? localStr.length : 0;
+          var newStr = JSON.stringify(d);
+          if (newStr.length !== localHash) {
+            loadData(d);
+            try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
+            try { rDash(); } catch(e) {}
+            try { reBuild(); } catch(e) {}
+          }
+        }).catch(function() {});
+        DB.ref(FB_GP_PATH).once('value').then(function(s) {
+          var d = s.val(); if (!d) return;
+          if (d.nroActual && d.nroActual !== GP.nroActual) {
+            if (d.params) GP.params = d.params;
+            if (d.historial) GP.historial = d.historial;
+            if (d.nroActual) GP.nroActual = d.nroActual;
+            var gnro = el('gp-nro'); if (gnro && gnro !== document.activeElement) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
+            try { gpRenderHist(); } catch(e) {}
+            try { gpSegRender(); } catch(e) {}
+            try { rDash(); } catch(e) {}
+          } else if (d.historial && JSON.stringify(d.historial).length !== JSON.stringify(GP.historial).length) {
+            if (d.params) GP.params = d.params;
+            if (d.historial) GP.historial = d.historial;
+            try { gpRenderHist(); } catch(e) {}
+            try { gpSegRender(); } catch(e) {}
+            try { rDash(); } catch(e) {}
+          }
+        }).catch(function() {});
+      }
+      setInterval(fbPoll, 20000);
     });
   }).catch(function() {
     try { var s = localStorage.getItem('jl_data'); if (s) loadData(JSON.parse(s)); } catch(e) {}
