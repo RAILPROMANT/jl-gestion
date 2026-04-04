@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404142101 -->
+<!-- JL Gestion v20260404233713 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -594,6 +594,7 @@ select option{background:var(--bg2)}
         <p style="font-size:12px;color:var(--txm);margin-bottom:12px">Si los datos de esta PC no coinciden con otros dispositivos, us&#225; este bot&#243;n para subir todo a Firebase.</p>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn btnp" id="btn-sync-firebase" onclick="sincronizarFirebase()">&#8679; Subir todo a Firebase</button>
+          <button class="btn btns btnd" onclick="resetPresupuestos()" style="margin-left:8px">&#128465; Borrar todos los presupuestos</button>
           <span id="sync-status" style="font-size:12px;color:var(--txm)"></span>
         </div>
       </div>
@@ -1160,6 +1161,19 @@ function renderAll() {
   try { renderProv(); } catch(e) {}
   try { rStats(); } catch(e) {}
   try { rCfg(); } catch(e) {}
+}
+
+function resetPresupuestos() {
+  if (!confirm('¿Borrar TODOS los presupuestos? Esto no tiene vuelta atrás.')) return;
+  GP.historial = [];
+  GP.nroActual = 1;
+  gpSv();
+  try { localStorage.removeItem('jl_gp'); } catch(e) {}
+  try { gpRenderHist(); } catch(e) {}
+  try { gpSegRender(); } catch(e) {}
+  try { rDash(); } catch(e) {}
+  var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-00001';
+  alert('Presupuestos borrados. El contador arranca desde P-00001.');
 }
 
 function sincronizarFirebase() {
