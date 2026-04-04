@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404022852 -->
+<!-- JL Gestion v202604040246282 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1055,9 +1055,9 @@ function iniciarApp() {
       DB.ref(FB_PATH).on('value', function(s) {
         var d = s.val(); if (!d) return;
         loadData(d); try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
-        reBuild(); renderAll();
-        // Also refresh GP-related UI since rDash needs GP data
-        rDash();
+        // Solo actualizar lo que siempre existe en el DOM
+        try { rDash(); } catch(e) {}
+        try { reBuild(); } catch(e) {}
       });
       DB.ref(FB_GP_PATH).on('value', function(s) {
         var d = s.val(); if (!d) return;
