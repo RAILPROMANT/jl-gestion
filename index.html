@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404134657 -->
+<!-- JL Gestion v20260404142101 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1085,6 +1085,26 @@ function iniciarApp() {
         try { rDash(); } catch(e) {}
         try { gpPopulateCliSel(); } catch(e) {}
       });
+
+      // Cuando la app vuelve al foco (mobile), recargar de Firebase
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+          DB.ref(FB_GP_PATH).once('value').then(function(snap) {
+            var d = snap.val(); if (!d) return;
+            if (d.historial && d.historial.length !== GP.historial.length) {
+              if (d.params) GP.params = d.params;
+              if (d.historial) GP.historial = d.historial;
+              if (d.nroActual) GP.nroActual = d.nroActual;
+              var gnro = el('gp-nro');
+              if (gnro && gnro !== document.activeElement) gnro.value = 'P-' + String(GP.nroActual).padStart(5,'0');
+              try { gpRenderHist(); } catch(e) {}
+              try { gpSegRender(); } catch(e) {}
+              try { rDash(); } catch(e) {}
+            }
+          }).catch(function(){});
+        }
+      });
+
     });
   }).catch(function() {
     try { var s = localStorage.getItem('jl_data'); if (s) loadData(JSON.parse(s)); } catch(e) {}
@@ -1131,7 +1151,16 @@ function reBuild() {
   var opf = el('oc-pfil'); if (opf) { var cv2 = opf.value; opf.innerHTML = '<option value="">Todos</option>' + S.proveedores.map(function(p) { return '<option value="' + p.id + '"' + (p.id === cv2 ? ' selected' : '') + '>' + p.nombre + '</option>'; }).join(''); }
 }
 
-function renderAll() { reBuild(); rDash(); rPers(); rPres(); rMat(); renderProv(); rStats(); rCfg(); }
+function renderAll() {
+  try { reBuild(); } catch(e) {}
+  try { rDash(); } catch(e) {}
+  try { rPers(); } catch(e) {}
+  try { rPres(); } catch(e) {}
+  try { rMat(); } catch(e) {}
+  try { renderProv(); } catch(e) {}
+  try { rStats(); } catch(e) {}
+  try { rCfg(); } catch(e) {}
+}
 
 function sincronizarFirebase() {
   var st = el('sync-status') || el('sync-status2');
@@ -1303,6 +1332,7 @@ function addObra() {
 }
 
 function rPres() {
+  if (!el('obra-list')) return;
   el('obra-list').innerHTML = S.obras.map(function(o) {
     return '<div class="oi' + (o.id === S.obraId ? ' on' : '') + '" data-id="' + o.id + '"><div>' + o.nombre + '</div><div class="oisub">' + (o.cliente || 'Sin cliente') + ' \u00b7 ' + o.fecha + '</div></div>';
   }).join('');
