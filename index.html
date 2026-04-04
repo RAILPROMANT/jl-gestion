@@ -935,11 +935,29 @@ function driveSync() {
 }
 
 function _loadFromDrive() {
+  // Drive is backup only - Firebase is the source of truth
+  // Only sync Drive → Firebase if Firebase is empty
   if (!DRIVE.con || !DRIVE.tok) return;
   _findOrCreate(function(fid) {
     DRIVE.fid = fid;
-    fetch('https://www.googleapis.com/drive/v3/files/' + fid + '?alt=media', { headers: { 'Authorization': 'Bearer ' + DRIVE.tok } })
-      .then(function(r) { return r.json(); }).then(function(d) { if (d && d.emp) { loadData(d); renderAll(); } }).catch(function() {});
+    // Check Firebase first
+    DB.ref(FB_PATH).once('value').then(function(snap) {
+      var fbData = snap.val();
+      if (fbData && fbData.emp && fbData.emp.length > 0) {
+        // Firebase has data - just sync Drive with Firebase (not the other way)
+        driveSync();
+        return;
+      }
+      // Firebase is empty - load from Drive as fallback
+      fetch('https://www.googleapis.com/drive/v3/files/' + fid + '?alt=media', { headers: { 'Authorization': 'Bearer ' + DRIVE.tok } })
+        .then(function(r) { return r.json(); }).then(function(d) {
+          if (d && d.emp) {
+            loadData(d);
+            DB.ref(FB_PATH).set(_exp()); // push Drive data to Firebase
+            renderAll();
+          }
+        }).catch(function() {});
+    }).catch(function() {});
   });
 }
 
@@ -995,7 +1013,8 @@ function _exp() { return { emp: S.emp, obras: S.obras, stock: S.stock, compras: 
 function sv() {
   try { localStorage.setItem('jl_data', JSON.stringify(_exp())); } catch(e) {}
   try { DB.ref(FB_PATH).set(_exp()); } catch(e) {}
-  if (DRIVE.con) driveSync();
+  // Drive sync happens separately via button or after explicit save
+  // Don't auto-sync Drive on every save to avoid conflicts
 }
 function loadData(d) {
   if (d.emp) S.emp = d.emp; if (d.obras) S.obras = d.obras; if (d.stock) S.stock = d.stock;
