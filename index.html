@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260404234522 -->
+<!-- JL Gestion v20260405001214 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -821,6 +821,7 @@ firebase.initializeApp(firebaseConfig);
 var DB = firebase.database();
 var FB_PATH = 'jl_data';
 var FB_GP_PATH = 'jl_gp';
+var _localSaving = false;
 var CURRENT_USER = null;
 
 // ═══════════════════════════════════════
@@ -1069,7 +1070,6 @@ function iniciarApp() {
       var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
       reBuild(); renderAll();
       // Firebase realtime listener - se dispara cada vez que cambian los datos
-      var _localSaving = false;
       DB.ref(FB_GP_PATH).on('value', function(snap) {
         var d = snap.val();
         if (!d) return;
