@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260405001214 -->
+<!-- JL Gestion v20260405001504 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1070,23 +1070,23 @@ function iniciarApp() {
       var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
       reBuild(); renderAll();
       // Firebase realtime listener - se dispara cada vez que cambian los datos
-      DB.ref(FB_GP_PATH).on('value', function(snap) {
-        var d = snap.val();
-        if (!d) return;
-        if (_localSaving) return; // ignorar cambios que yo mismo acabo de hacer
-        if (d.historial && d.historial.length === GP.historial.length && d.nroActual === GP.nroActual) return; // sin cambios reales
-        if (d.params) GP.params = d.params;
-        if (d.historial) GP.historial = d.historial;
-        if (d.nroActual) GP.nroActual = d.nroActual;
-        var gnro = el('gp-nro');
-        if (gnro && gnro !== document.activeElement) {
-          gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
-        }
-        try { gpRenderHist(); } catch(e) {}
-        try { gpSegRender(); } catch(e) {}
-        try { rDash(); } catch(e) {}
-        try { gpPopulateCliSel(); } catch(e) {}
-      });
+      // Poll every 5 seconds - simple and reliable
+      setInterval(function() {
+        DB.ref(FB_GP_PATH).once('value').then(function(snap) {
+          var d = snap.val(); if (!d) return;
+          var fbLen = d.historial ? d.historial.length : 0;
+          var fbNro = d.nroActual || 1;
+          if (fbLen === GP.historial.length && fbNro === GP.nroActual) return;
+          GP.params = d.params || GP.params;
+          GP.historial = d.historial || [];
+          GP.nroActual = d.nroActual || 1;
+          var gnro = el('gp-nro');
+          if (gnro && gnro !== document.activeElement) gnro.value = 'P-' + String(GP.nroActual).padStart(5,'0');
+          try { gpRenderHist(); } catch(e) {}
+          try { gpSegRender(); } catch(e) {}
+          try { rDash(); } catch(e) {}
+        }).catch(function(){});
+      }, 5000);
 
       // Cuando la app vuelve al foco (mobile), recargar de Firebase
       document.addEventListener('visibilitychange', function() {
