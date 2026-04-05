@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260405002315 -->
+<!-- JL Gestion v20260405010412 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -257,21 +257,21 @@ select option{background:var(--bg2)}
       <div id="d-alerts"></div>
       <div class="kpis">
         <div class="kpi"><div class="kl">Personal activo</div><div class="kv" id="k-emp">0</div><div class="ks" id="k-cos">costo $0</div></div>
-        <div class="kpi"><div class="kl">Precio de venta</div><div class="kv" id="k-ven">$0</div><div class="ks">facturación est.</div></div>
-        <div class="kpi"><div class="kl">Clientes</div><div class="kv" id="k-prv">0</div><div class="ks" id="k-stk">stock $0</div></div>
+        <div class="kpi"><div class="kl">Clientes</div><div class="kv" id="k-prv">0</div><div class="ks">registrados</div></div>
         <div class="kpi"><div class="kl">Presupuestos</div><div class="kv" id="k-pres-tot">0</div><div class="ks" id="k-pres-sub">0 asignados</div></div>
+        <div class="kpi"><div class="kl">Facturado</div><div class="kv" id="k-fact" style="font-size:16px">$0</div><div class="ks">obras finalizadas</div></div>
       </div>
       <div class="three" style="margin-bottom:14px">
-        <div class="card" style="border-top:3px solid #f59e0b"><div class="sttl" style="color:#f59e0b">Pendientes</div><div style="font-size:36px;font-weight:900;color:#f59e0b;margin:8px 0" id="d-obras-pend">0</div><div style="font-size:12px;color:var(--txm)">Pendientes de respuesta</div></div>
+        <div class="card" style="border-top:3px solid #f59e0b"><div class="sttl" style="color:#f59e0b">Pendientes</div><div style="font-size:36px;font-weight:900;color:#f59e0b;margin:8px 0" id="d-obras-pend">0</div><div style="font-size:12px;color:var(--txm)">Sin respuesta</div></div>
         <div class="card" style="border-top:3px solid #3b82f6"><div class="sttl" style="color:#3b82f6">En ejecuci&#243;n</div><div style="font-size:36px;font-weight:900;color:#3b82f6;margin:8px 0" id="d-obras-ejec">0</div><div style="font-size:12px;color:var(--txm)">Avance y cobro</div></div>
         <div class="card" style="border-top:3px solid #22c55e"><div class="sttl" style="color:#22c55e">Finalizadas</div><div style="font-size:36px;font-weight:900;color:#22c55e;margin:8px 0" id="d-obras-fin">0</div><div style="font-size:12px;color:var(--txm)">Completadas</div></div>
       </div>
+      <div id="d-vencidos" style="margin-bottom:14px"></div>
       <div class="two">
         <div class="card"><div class="sttl">Presupuestos recientes</div><div id="d-obras"><div class="empty">Sin presupuestos</div></div>
-          <div style="margin-top:12px"><button class="btn btns" onclick="goTab('gpres');setTimeout(function(){var x=document.querySelector('.st[data-sub=gpres-seg]');if(x)x.click();},100)">Ver seguimiento →</button></div></div>
-        <div class="card"><div class="sttl">Últimos clientes</div><div id="d-provs"><div class="empty">Sin proveedores</div></div><div style="margin-top:12px"><button class="btn btns" data-goto="prov">Ver directorio →</button></div></div>
+          <div style="margin-top:12px"><button class="btn btns" onclick="goTab('gpres');setTimeout(function(){var x=document.querySelector('.st[data-sub=gpres-seg]');if(x)x.click();},100)">Ver seguimiento &#8594;</button></div></div>
+        <div class="card"><div class="sttl">&#218;ltimos clientes</div><div id="d-provs"><div class="empty">Sin clientes</div></div><div style="margin-top:12px"><button class="btn btns" data-goto="prov">Ver directorio &#8594;</button></div></div>
       </div>
-      <div class="card"><div class="sttl">Resumen personal</div><div id="d-pers"><div class="empty">Sin empleados</div></div></div>
     </div>
     <div id="pers" class="page">
       <div class="stabs">
@@ -1212,30 +1212,41 @@ function oTot(o) { return Object.values(o.items).flat().reduce(function(a, it) {
 // ═══════════════════════════════════════
 function rDash() {
   var tC = S.emp.reduce(function(a, e) { return a + gEC(e); }, 0);
-  var tV = S.emp.reduce(function(a, e) { return a + gEV(e); }, 0);
-  var sV = S.stock.reduce(function(a, s) { return a + s.qty * s.cu; }, 0);
   var al = S.stock.filter(function(s) { return s.qty <= s.qmin; });
-  // GP historial stats
   var hist = (typeof GP !== 'undefined' && GP.historial) ? GP.historial : [];
   var gpPend = hist.filter(function(h){ return h.estado === 'Pendiente de respuesta'; }).length;
   var gpAsig = hist.filter(function(h){ return h.estado === 'Asignado'; }).length;
   var gpEjec = hist.filter(function(h){ return h.estado === 'En ejecución'; }).length;
   var gpFin  = hist.filter(function(h){ return h.estado === 'Finalizado'; }).length;
-  var gpTotFact = hist.filter(function(h){ return h.estado === 'Finalizado'; }).reduce(function(a,h){ return a + (h.total||0); }, 0);
+  var gpFact = hist.filter(function(h){ return h.estado === 'Finalizado'; }).reduce(function(a,h){ return a+(h.total||0); },0);
+
   // KPIs
   el('k-emp').textContent = S.emp.length;
   el('k-cos').textContent = 'costo ' + $f(tC);
-  el('k-ven').textContent = $f(tV);
   el('k-prv').textContent = S.proveedores.length;
-  el('k-stk').textContent = 'stock ' + $f(sV) + (al.length ? ' · ' + al.length + ' alertas' : '');
   if(el('k-pres-tot')) el('k-pres-tot').textContent = hist.length;
   if(el('k-pres-sub')) el('k-pres-sub').textContent = gpAsig + ' asignados';
+  if(el('k-fact')) el('k-fact').textContent = $f(gpFact);
+
   // Estado cards
-  if(el('d-obras-pend')) { el('d-obras-pend').textContent = gpPend; el('d-obras-pend').nextElementSibling && (el('d-obras-pend').nextElementSibling.textContent = 'Pendientes de respuesta'); }
+  if(el('d-obras-pend')) el('d-obras-pend').textContent = gpPend;
   if(el('d-obras-ejec')) el('d-obras-ejec').textContent = gpEjec;
   if(el('d-obras-fin'))  el('d-obras-fin').textContent  = gpFin;
-  // Alerts
-  el('d-alerts').innerHTML = al.length ? '<div class="alert">⚠ Stock crítico: ' + al.map(function(s) { return s.nombre; }).join(', ') + '</div>' : '';
+
+  // Alertas — stock crítico + presupuestos sin respuesta hace más de 7 días
+  var alertas = [];
+  if (al.length) alertas.push('⚠ Stock crítico: ' + al.map(function(s){return s.nombre;}).join(', '));
+  var hoy = new Date();
+  var vencidos = hist.filter(function(h) {
+    if (h.estado !== 'Pendiente de respuesta') return false;
+    var partes = h.fecha.split('/');
+    if (partes.length !== 3) return false;
+    var fh = new Date(partes[2], partes[1]-1, partes[0]);
+    return (hoy - fh) / (1000*60*60*24) > 7;
+  });
+  if (vencidos.length) alertas.push('⚠ ' + vencidos.length + ' presupuesto' + (vencidos.length>1?'s':'') + ' sin respuesta hace más de 7 días');
+  el('d-alerts').innerHTML = alertas.map(function(a){ return '<div class="alert">' + a + '</div>'; }).join('');
+
   // Presupuestos recientes
   el('d-obras').innerHTML = hist.length ? hist.slice(0, 5).map(function(h) {
     var col = {'Asignado':'#f59e0b','En ejecución':'#3b82f6','Finalizado':'#22c55e','Rechazado':'var(--red2)','Pendiente de respuesta':'var(--txm)'}[h.estado] || 'var(--txm)';
@@ -1246,17 +1257,14 @@ function rDash() {
       + '<span style="font-size:11px;font-weight:700;color:' + col + '">' + (h.estado||'') + '</span>'
       + '<span style="font-weight:700;color:var(--red2)">' + $f(h.total||0) + '</span></div></div>';
   }).join('') : '<div class="empty">Sin presupuestos</div>';
+
   // Últimos clientes
   el('d-provs').innerHTML = S.proveedores.length ? S.proveedores.slice(0, 5).map(function(p) {
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--br)">'
       + '<div style="width:32px;height:32px;border-radius:8px;background:var(--redd);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--red2)">' + ini(p.nombre) + '</div>'
       + '<div><div style="font-weight:500;font-size:13px">' + p.nombre + '</div>'
-      + '<div style="font-size:11px;color:var(--txm)">' + (p.rubro || 'Sin clasificar') + (p.referentes&&p.referentes.length ? ' · ' + p.referentes.length + ' ref.' : '') + '</div></div></div>';
+      + '<div style="font-size:11px;color:var(--txm)">' + (p.rubro||'Sin clasificar') + (p.referentes&&p.referentes.length?' · '+p.referentes.length+' ref.':'') + '</div></div></div>';
   }).join('') : '<div class="empty">Sin clientes</div>';
-  // Personal
-  el('d-pers').innerHTML = S.emp.length ? '<div style="overflow-x:auto"><table><thead><tr><th>Empleado</th><th>Categoría</th><th>Hs norm.</th><th>Hs extra</th><th>Costo empleador</th><th>Precio de venta</th></tr></thead><tbody>' + S.emp.map(function(e) {
-    return '<tr><td style="font-weight:600">' + e.nombre + '</td><td><span class="bdgy">' + rL(e.cat) + '</span></td><td>' + e.hn + '</td><td>' + e.he + '</td><td style="color:var(--red2)">' + $f(gEC(e)) + '</td><td style="color:var(--grn);font-weight:600">' + $f(gEV(e)) + '</td></tr>';
-  }).join('') + '</tbody></table></div>' : '<div class="empty">Sin empleados</div>';
 }
 
 // ═══════════════════════════════════════
