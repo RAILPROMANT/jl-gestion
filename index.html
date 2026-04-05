@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260405001504 -->
+<!-- JL Gestion v20260405002315 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1966,7 +1966,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (t.id === 'btn-add-iva') { var n7 = el('cfg-ivn').value.trim(); if (!n7 || S.ivas.indexOf(n7) >= 0) return; S.ivas.push(n7); el('cfg-ivn').value = ''; sv(); rCfg(); reBuild(); return; }
     if (t.id === 'btn-gp-add') { GP.items.push({ concepto: '', detalle: '', importe: 0 }); gpRenderItems(); return; }
     if (t.id === 'btn-gp-pdf') { gpPDF(); return; }
-    if (t.id === 'btn-gp-guardar') { gpGuardar(); return; }
+    // gpGuardar handled in DOMContentLoaded block
     if (t.id === 'btn-gp-limpiar') { gpLimpiar(); return; }
     if (t.id === 'btn-gp-save-params') { gpSaveParams(); return; }
     // DB cat selector
