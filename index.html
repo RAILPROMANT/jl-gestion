@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260407020727 -->
+<!-- JL Gestion v20260407021755 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1115,6 +1115,102 @@ function iniciarApp() {
     var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
     reBuild(); renderAll();
   });
+}
+
+// ═══════════════════════════════════════
+// UOCRA
+// ═══════════════════════════════════════
+var UOCRA = [
+  { cat: 'Of. Especializado', basico: 5470,   mant70: 3829,    parada80: 4376   },
+  { cat: 'Oficial',           basico: 4679,   mant70: 3275.30, parada80: 3743.20 },
+  { cat: 'Medio Oficial',     basico: 4324,   mant70: 3026.80, parada80: 3459.20 },
+  { cat: 'Ayudante',          basico: 3980,   mant70: 2786,    parada80: 3184   }
+];
+
+function uocraRenderTabla() {
+  var tbody = el('uocra-body'); if (!tbody) return;
+  tbody.innerHTML = UOCRA.map(function(r, i) {
+    return '<tr>'
+      + '<td style="font-weight:600">' + r.cat + '</td>'
+      + '<td style="text-align:right"><input type="number" class="uocra-basico" data-i="' + i + '" value="' + r.basico + '" style="width:110px;text-align:right"></td>'
+      + '<td style="text-align:right"><input type="number" class="uocra-mant" data-i="' + i + '" value="' + r.mant70 + '" style="width:110px;text-align:right"></td>'
+      + '<td style="text-align:right"><input type="number" class="uocra-parada" data-i="' + i + '" value="' + r.parada80 + '" style="width:110px;text-align:right"></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function chCalcularUOCRA() {
+  // Get hora nuestra from chCalcular context
+  var hb    = parseFloat((el('ch-hb')||{}).value) || 5470;
+  var cs    = (parseFloat((el('ch-cs')||{}).value) || 45) / 100;
+  var dias  = parseFloat((el('ch-dias')||{}).value) || 22;
+  var hd    = parseFloat((el('ch-hd')||{}).value) || 9;
+  var dsem  = parseFloat((el('ch-dsem')||{}).value) || 180;
+  var rm    = parseFloat((el('ch-rm')||{}).value) || 270000;
+  var pres  = parseFloat((el('ch-pres')||{}).value) || 0.2;
+  var fd    = parseFloat((el('ch-fd')||{}).value) || 0.12;
+  var pd    = parseFloat((el('ch-pd')||{}).value) || 0.5;
+  var agui  = parseFloat((el('ch-agui')||{}).value) || 60;
+  var epp   = parseFloat((el('ch-epp')||{}).value) || 80.22;
+  var vianda= parseFloat((el('ch-vianda')||{}).value) || 88.8;
+  var agua  = parseFloat((el('ch-agua')||{}).value) || 185;
+
+  var revMed   = (rm / dsem) / hd;
+  var presAdc  = hb * pres;
+  var fondoDes = hb * fd;
+  var provDesp = (hb * hd * dias * pd) / (176 * 6);
+  var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
+  var horaNuestra = hb * (1 + cs) + totalAdc; // hora vía (sin COPA)
+
+  // For each empresa get hora copa
+  var empresas = CH.empresas || [];
+
+  var rows = UOCRA.map(function(r) {
+    // Hora UOCRA mant (c/COPA) y parada (vía)
+    var uocraCopa = r.mant70;
+    var uocraVia  = r.parada80;
+
+    // Ganancia = UOCRA - nuestro costo
+    var ganCopa = uocraCopa - horaNuestra;
+    var ganVia  = uocraVia  - horaNuestra;
+
+    function colorGan(v) {
+      return v >= 0 ? 'color:var(--grn)' : 'color:var(--red2)';
+    }
+
+    // Also show per empresa copa
+    var empCols = empresas.map(function(emp) {
+      var factor   = 1 + emp.copa / 100;
+      var horaCopa = hb * factor * (1 + cs) + totalAdc;
+      var gan      = uocraCopa - horaCopa;
+      return '<td style="text-align:right;font-weight:700;' + colorGan(gan) + '">' + $f(Math.round(gan)) + '</td>';
+    }).join('');
+
+    return '<tr>'
+      + '<td style="font-weight:700">' + r.cat + '</td>'
+      + '<td style="text-align:right">' + $f(uocraCopa) + '</td>'
+      + '<td style="text-align:right">' + $f(uocraVia) + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(horaNuestra)) + '</td>'
+      + '<td style="text-align:right;font-weight:700;' + colorGan(ganCopa) + '">' + $f(Math.round(ganCopa)) + '</td>'
+      + '<td style="text-align:right;font-weight:700;' + colorGan(ganVia) + '">' + $f(Math.round(ganVia)) + '</td>'
+      + empCols
+      + '</tr>';
+  }).join('');
+
+  var empHeaders = empresas.map(function(emp) {
+    return '<th style="text-align:right">Gan. ' + emp.nombre + ' (COPA)</th>';
+  }).join('');
+
+  el('uocra-resultado').innerHTML = '<div style="overflow-x:auto"><table>'
+    + '<thead><tr>'
+    + '<th>Categor&#237;a</th>'
+    + '<th style="text-align:right">UOCRA Mant. (COPA)</th>'
+    + '<th style="text-align:right">UOCRA Parada (V&#237;a)</th>'
+    + '<th style="text-align:right">Nuestra hora</th>'
+    + '<th style="text-align:right">Gan. vs Mant.</th>'
+    + '<th style="text-align:right">Gan. vs Parada</th>'
+    + empHeaders
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 // ═══════════════════════════════════════
@@ -2255,7 +2351,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
-    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){chRenderEmpresas();chCalcular();},60);return;}
+    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){chRenderEmpresas();chCalcular();uocraRenderTabla();chCalcularUOCRA();},60);return;}
     if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-bdb'){setTimeout(function(){gpDbRender();},60);return;}
@@ -2534,11 +2630,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
   el('p-srch').addEventListener('input', renderProv);
 
+  // UOCRA input delegation
+  document.addEventListener('input', function(e) {
+    var t = e.target;
+    if (t.classList.contains('uocra-basico')) { UOCRA[+t.dataset.i].basico = parseFloat(t.value)||0; chCalcularUOCRA(); }
+    if (t.classList.contains('uocra-mant'))   { UOCRA[+t.dataset.i].mant70 = parseFloat(t.value)||0; chCalcularUOCRA(); }
+    if (t.classList.contains('uocra-parada')) { UOCRA[+t.dataset.i].parada80 = parseFloat(t.value)||0; chCalcularUOCRA(); }
+  });
+
   // Calculo Hora - recalcular al cambiar cualquier campo
   var chInputIds = ['ch-hb','ch-cs','ch-dias','ch-hd','ch-dsem','ch-rm','ch-pres','ch-fd','ch-pd','ch-agui','ch-epp','ch-vianda','ch-agua'];
   chInputIds.forEach(function(id) {
     var e = el(id);
-    if (e) e.addEventListener('input', function() { if (el('ch-resultado').innerHTML) chCalcular(); });
+    if (e) e.addEventListener('input', function() { if (el('ch-resultado').innerHTML) chCalcular(); chCalcularUOCRA(); });
   });
 
   // ======= PRESUPUESTO JL =======
@@ -2809,6 +2913,34 @@ document.addEventListener('DOMContentLoaded', function() {
       <button class="btn btns btnp" onclick="chCalcular()">&#8635; Calcular</button>
     </div>
     <div id="ch-resultado"></div>
+  </div>
+
+  <!-- UOCRA vs PRESUPUESTADO -->
+  <div class="card" style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <div class="sttl" style="margin-bottom:2px">Hora UOCRA vs Hora Presupuestada</div>
+        <div style="font-size:11px;color:var(--txm)">Ganancia por hora seg&#250;n categor&#237;a y modalidad</div>
+      </div>
+      <button class="btn btns btnp" onclick="chCalcularUOCRA()">&#8635; Actualizar</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="sttl">Tabla UOCRA — Acuerdo Agroexportador (editables)</div>
+      <div style="overflow-x:auto">
+        <table id="uocra-tabla">
+          <thead>
+            <tr>
+              <th>Categor&#237;a</th>
+              <th style="text-align:right">Salario b&#225;sico</th>
+              <th style="text-align:right">Mant. 70%</th>
+              <th style="text-align:right">Parada 80%</th>
+            </tr>
+          </thead>
+          <tbody id="uocra-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="uocra-resultado"></div>
   </div>
 </div>
 
