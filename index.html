@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260407021755 -->
+<!-- JL Gestion v20260407023359 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1115,6 +1115,108 @@ function iniciarApp() {
     var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
     reBuild(); renderAll();
   });
+}
+
+// ═══════════════════════════════════════
+// HORA FINAL POR CATEGORIA UOCRA
+// ═══════════════════════════════════════
+function chGetAdicionales() {
+  var hb    = parseFloat((el('ch-hb')||{}).value) || 5470;
+  var cs    = (parseFloat((el('ch-cs')||{}).value) || 45) / 100;
+  var dias  = parseFloat((el('ch-dias')||{}).value) || 22;
+  var hd    = parseFloat((el('ch-hd')||{}).value) || 9;
+  var dsem  = parseFloat((el('ch-dsem')||{}).value) || 180;
+  var rm    = parseFloat((el('ch-rm')||{}).value) || 270000;
+  var pres  = parseFloat((el('ch-pres')||{}).value) || 0.2;
+  var fd    = parseFloat((el('ch-fd')||{}).value) || 0.12;
+  var pd    = parseFloat((el('ch-pd')||{}).value) || 0.5;
+  var agui  = parseFloat((el('ch-agui')||{}).value) || 60;
+  var epp   = parseFloat((el('ch-epp')||{}).value) || 80.22;
+  var vianda= parseFloat((el('ch-vianda')||{}).value) || 88.8;
+  var agua  = parseFloat((el('ch-agua')||{}).value) || 185;
+  var revMed   = (rm / dsem) / hd;
+  var presAdc  = hb * pres;
+  var fondoDes = hb * fd;
+  var provDesp = (hb * hd * dias * pd) / (176 * 6);
+  var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
+  return { cs: cs, dias: dias, hd: hd, dsem: dsem, rm: rm, pres: pres, fd: fd, pd: pd,
+           agui: agui, epp: epp, vianda: vianda, agua: agua, totalAdc: totalAdc, revMed: revMed };
+}
+
+function chHoraFinal(basico) {
+  var p = chGetAdicionales();
+  var cs = p.cs, dias = p.dias, hd = p.hd, dsem = p.dsem;
+  var rm = p.rm, pres = p.pres, fd = p.fd, pd = p.pd;
+  var agui = p.agui, epp = p.epp, vianda = p.vianda, agua = p.agua;
+  var revMed   = (rm / dsem) / hd;
+  var presAdc  = basico * pres;
+  var fondoDes = basico * fd;
+  var provDesp = (basico * hd * dias * pd) / (176 * 6);
+  var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
+  return basico * (1 + cs) + totalAdc;
+}
+
+function chCalcularCostoUOCRA() {
+  var d = el('ch-uocra-costo'); if (!d) return;
+  var rows = UOCRA.map(function(r) {
+    var horaBase  = chHoraFinal(r.basico);
+    var horaMant  = chHoraFinal(r.basico * 1.70);
+    var horaParad = chHoraFinal(r.basico * 1.80);
+    return '<tr>'
+      + '<td style="font-weight:700">' + r.cat + '</td>'
+      + '<td style="text-align:right;font-weight:600">' + $f(Math.round(horaBase)) + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:var(--blu)">' + $f(Math.round(horaMant)) + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:var(--grn)">' + $f(Math.round(horaParad)) + '</td>'
+      + '</tr>';
+  }).join('');
+  d.innerHTML = '<div style="overflow-x:auto"><table>'
+    + '<thead><tr>'
+    + '<th>Categor&#237;a</th>'
+    + '<th style="text-align:right">Hora b&#225;sica</th>'
+    + '<th style="text-align:right">Hora Mant. (+70%)</th>'
+    + '<th style="text-align:right">Hora Parada (+80%)</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  chCalcularGanancia();
+}
+
+function chCalcularGanancia() {
+  var d = el('ch-ganancia-resultado'); if (!d) return;
+  var pct = (parseFloat((el('ch-gan-pct')||{}).value) || 30) / 100;
+  var rows = UOCRA.map(function(r) {
+    var horaBase  = chHoraFinal(r.basico);
+    var horaMant  = chHoraFinal(r.basico * 1.70);
+    var horaParad = chHoraFinal(r.basico * 1.80);
+    var ganBase  = horaBase  * pct;
+    var ganMant  = horaMant  * pct;
+    var ganParad = horaParad * pct;
+    var precioBase  = horaBase  * (1 + pct);
+    var precioMant  = horaMant  * (1 + pct);
+    var precioParad = horaParad * (1 + pct);
+    return '<tr>'
+      + '<td style="font-weight:700">' + r.cat + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(horaBase)) + '</td>'
+      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganBase)) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + $f(Math.round(precioBase)) + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(horaMant)) + '</td>'
+      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganMant)) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + $f(Math.round(precioMant)) + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(horaParad)) + '</td>'
+      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganParad)) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + $f(Math.round(precioParad)) + '</td>'
+      + '</tr>';
+  }).join('');
+  d.innerHTML = '<div style="overflow-x:auto"><table>'
+    + '<thead>'
+    + '<tr><th>Categor&#237;a</th>'
+    + '<th colspan="3" style="text-align:center;background:rgba(96,165,250,.08);color:var(--blu)">Hora B&#225;sica</th>'
+    + '<th colspan="3" style="text-align:center;background:rgba(34,197,94,.06);color:var(--grn)">Hora Mantenimiento (+70%)</th>'
+    + '<th colspan="3" style="text-align:center;background:rgba(245,158,11,.06);color:#f59e0b">Hora Parada (+80%)</th>'
+    + '</tr>'
+    + '<tr><th></th>'
+    + '<th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
+    + '<th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
+    + '<th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 // ═══════════════════════════════════════
@@ -2351,7 +2453,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
-    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){chRenderEmpresas();chCalcular();uocraRenderTabla();chCalcularUOCRA();},60);return;}
+    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){chRenderEmpresas();chCalcular();chCalcularCostoUOCRA();uocraRenderTabla();chCalcularUOCRA();},60);return;}
     if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-bdb'){setTimeout(function(){gpDbRender();},60);return;}
@@ -2630,6 +2732,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
   el('p-srch').addEventListener('input', renderProv);
 
+  // Ganancia pct auto-recalc
+  var ganEl = el('ch-gan-pct');
+  if (ganEl) ganEl.addEventListener('input', chCalcularGanancia);
+
   // UOCRA input delegation
   document.addEventListener('input', function(e) {
     var t = e.target;
@@ -2642,7 +2748,7 @@ document.addEventListener('DOMContentLoaded', function() {
   var chInputIds = ['ch-hb','ch-cs','ch-dias','ch-hd','ch-dsem','ch-rm','ch-pres','ch-fd','ch-pd','ch-agui','ch-epp','ch-vianda','ch-agua'];
   chInputIds.forEach(function(id) {
     var e = el(id);
-    if (e) e.addEventListener('input', function() { if (el('ch-resultado').innerHTML) chCalcular(); chCalcularUOCRA(); });
+    if (e) e.addEventListener('input', function() { if (el('ch-resultado').innerHTML) chCalcular(); chCalcularCostoUOCRA(); chCalcularUOCRA(); });
   });
 
   // ======= PRESUPUESTO JL =======
@@ -2913,6 +3019,25 @@ document.addEventListener('DOMContentLoaded', function() {
       <button class="btn btns btnp" onclick="chCalcular()">&#8635; Calcular</button>
     </div>
     <div id="ch-resultado"></div>
+  </div>
+
+  <!-- HORA FINAL POR CATEGORIA UOCRA -->
+  <div class="card" style="margin-top:14px">
+    <div style="margin-bottom:14px">
+      <div class="sttl" style="margin-bottom:2px">Hora final por categor&#237;a UOCRA</div>
+      <div style="font-size:11px;color:var(--txm)">Costo real de hora seg&#250;n categor&#237;a, aplicando cargas y adicionales</div>
+    </div>
+    <div id="ch-uocra-costo"></div>
+    <div class="dvd" style="margin:16px 0"></div>
+    <div class="sttl">Ganancia deseada</div>
+    <div class="fr" style="margin-top:8px;align-items:flex-end">
+      <div class="fg" style="max-width:180px">
+        <label>% Ganancia sobre costo</label>
+        <input type="number" id="ch-gan-pct" value="30" min="0" step="1">
+      </div>
+      <button class="btn btns btnp" onclick="chCalcularGanancia()">Calcular</button>
+    </div>
+    <div id="ch-ganancia-resultado" style="margin-top:14px"></div>
   </div>
 
   <!-- UOCRA vs PRESUPUESTADO -->
