@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260405010412 -->
+<!-- JL Gestion v20260407015024 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -250,6 +250,7 @@ select option{background:var(--bg2)}
     <div class="nb" data-tab="gpres">Presupuestos</div>
     <div class="nb" data-tab="valorhora">Cálculo Valor Hora</div>
     <div class="nb" data-tab="cfg">Configuraci&#243;n</div>
+    <div class="nb" data-tab="calchora">C&#225;lculo Hora</div>
   </div>
   <div class="body">
 
@@ -1164,6 +1165,83 @@ function renderAll() {
   try { rCfg(); } catch(e) {}
 }
 
+// ═══════════════════════════════════════
+// CALCULO HORA
+// ═══════════════════════════════════════
+var CH = {
+  empresas: [
+    { nombre: 'BUNGE/T6/RENOVA', copa: 70 },
+    { nombre: 'ACA', copa: 63 }
+  ]
+};
+
+function chRenderEmpresas() {
+  var d = el('ch-empresas-list'); if (!d) return;
+  d.innerHTML = CH.empresas.map(function(e, i) {
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      + '<span style="flex:1;font-size:13px;font-weight:600">' + e.nombre + '</span>'
+      + '<span style="font-size:12px;color:var(--txm)">COPA: ' + e.copa + '%</span>'
+      + '<button class="btn btns btnd ch-del-emp" data-i="' + i + '">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+function chCalcular() {
+  var hb    = parseFloat(el('ch-hb').value) || 5470;
+  var cs    = (parseFloat(el('ch-cs').value) || 45) / 100;
+  var dias  = parseFloat(el('ch-dias').value) || 22;
+  var hd    = parseFloat(el('ch-hd').value) || 9;
+  var dsem  = parseFloat(el('ch-dsem').value) || 180;
+  var rm    = parseFloat(el('ch-rm').value) || 270000;
+  var pres  = parseFloat(el('ch-pres').value) || 0.2;
+  var fd    = parseFloat(el('ch-fd').value) || 0.12;
+  var pd    = parseFloat(el('ch-pd').value) || 0.5;
+  var agui  = parseFloat(el('ch-agui').value) || 60;
+  var epp   = parseFloat(el('ch-epp').value) || 80.22;
+  var vianda= parseFloat(el('ch-vianda').value) || 88.8;
+  var agua  = parseFloat(el('ch-agua').value) || 185;
+
+  var revMed   = (rm / dsem) / hd;
+  var presAdc  = hb * pres;
+  var fondoDes = hb * fd;
+  var provDesp = hb * pd / (dias * hd);
+  var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
+  var horaVia  = hb * (1 + cs) + totalAdc;
+
+  var rows = CH.empresas.map(function(emp) {
+    var factor  = 1 + emp.copa / 100;
+    var horaCopa = hb * factor * (1 + cs) + totalAdc;
+    return '<tr>'
+      + '<td style="font-weight:700">' + emp.nombre + '</td>'
+      + '<td style="text-align:center">' + emp.copa + '%</td>'
+      + '<td style="text-align:center">' + factor.toFixed(2) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(Math.round(horaCopa)) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--blu)">' + $f(Math.round(horaVia)) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  el('ch-resultado').innerHTML =
+    '<div style="margin-bottom:12px;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--br)">'
+    + '<div class="sttl">Desglose adicionales por hora</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12px">'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">Revis. médica</div><strong>' + $f(Math.round(revMed*100)/100) + '</strong></div>'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">Presentismo</div><strong>' + $f(Math.round(presAdc*100)/100) + '</strong></div>'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">Fondo desempleo</div><strong>' + $f(Math.round(fondoDes*100)/100) + '</strong></div>'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">Prov. despido</div><strong>' + $f(Math.round(provDesp*100)/100) + '</strong></div>'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">Aguinaldo</div><strong>' + $f(agui) + '</strong></div>'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">EPP</div><strong>' + $f(epp) + '</strong></div>'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">Vianda</div><strong>' + $f(vianda) + '</strong></div>'
+    + '<div><div style="color:var(--txm);margin-bottom:2px">Agua</div><strong>' + $f(agua) + '</strong></div>'
+    + '</div>'
+    + '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--br);font-size:13px">'
+    + 'Total adicionales/hora: <strong style="color:var(--grn)">' + $f(Math.round(totalAdc*100)/100) + '</strong>'
+    + '</div></div>'
+    + '<div style="overflow-x:auto"><table>'
+    + '<thead><tr><th>Empresa</th><th style="text-align:center">% COPA</th><th style="text-align:center">Factor</th>'
+    + '<th style="text-align:right">Hora c/COPA</th><th style="text-align:right">Hora Vía</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
 function resetPresupuestos() {
   if (!confirm('¿Borrar TODOS los presupuestos? Esto no tiene vuelta atrás.')) return;
   GP.historial = [];
@@ -1962,6 +2040,18 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     if (t.classList.contains('pm-ref-nom')) { return; }
+    if (t.id === 'btn-ch-add-emp') {
+      var n = (el('ch-emp-nombre')||{}).value || '';
+      var c = parseFloat((el('ch-emp-copa')||{}).value) || 70;
+      if (!n.trim()) return;
+      CH.empresas.push({ nombre: n.trim(), copa: c });
+      el('ch-emp-nombre').value = ''; el('ch-emp-copa').value = '70';
+      chRenderEmpresas(); chCalcular(); return;
+    }
+    if (t.classList.contains('ch-del-emp')) {
+      CH.empresas.splice(parseInt(t.dataset.i), 1);
+      chRenderEmpresas(); chCalcular(); return;
+    }
     if (t.id === 'btn-new-prov') { openProvMo(); return; }
     if (t.id === 'btn-save-prov') { saveProveedor(); return; }
     if (t.id === 'btn-new-oc') { openOCMo(); return; }
@@ -2165,6 +2255,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
+    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){chRenderEmpresas();chCalcular();},60);return;}
     if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-bdb'){setTimeout(function(){gpDbRender();},60);return;}
@@ -2654,5 +2745,65 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 <div id="pdfprev" style="display:none;position:fixed;top:0;left:0;width:100%;background:#fff;z-index:9999;overflow:auto"></div>
+<div id="calchora" class="page">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+    <!-- DATOS BASE -->
+    <div class="card">
+      <div class="sttl">Datos base</div>
+      <div class="fr" style="flex-direction:column;gap:10px;margin-top:0">
+        <div class="fr" style="margin-top:0">
+          <div class="fg" style="flex:1"><label>Hora b&#225;sica ($)</label><input type="number" id="ch-hb" value="5470"></div>
+          <div class="fg" style="flex:1"><label>Cargas sociales (%)</label><input type="number" id="ch-cs" value="45"></div>
+        </div>
+        <div class="fr" style="margin-top:0">
+          <div class="fg" style="flex:1"><label>D&#237;as trab. mensual</label><input type="number" id="ch-dias" value="22"></div>
+          <div class="fg" style="flex:1"><label>Horas diarias</label><input type="number" id="ch-hd" value="9"></div>
+        </div>
+        <div class="fr" style="margin-top:0">
+          <div class="fg" style="flex:1"><label>D&#237;as por semestre</label><input type="number" id="ch-dsem" value="180"></div>
+          <div class="fg" style="flex:1"><label>Revis. m&#233;dica ($)</label><input type="number" id="ch-rm" value="270000"></div>
+        </div>
+        <div class="fr" style="margin-top:0">
+          <div class="fg" style="flex:1"><label>Presentismo (% HB)</label><input type="number" id="ch-pres" value="0.2"></div>
+          <div class="fg" style="flex:1"><label>Fondo desempleo (%)</label><input type="number" id="ch-fd" value="0.12"></div>
+        </div>
+        <div class="fr" style="margin-top:0">
+          <div class="fg" style="flex:1"><label>Prov. despido (% HB)</label><input type="number" id="ch-pd" value="0.5"></div>
+        </div>
+      </div>
+    </div>
+    <!-- ADICIONALES -->
+    <div class="card">
+      <div class="sttl">Adicionales por hora</div>
+      <div class="fr" style="flex-direction:column;gap:10px;margin-top:0">
+        <div class="fr" style="margin-top:0">
+          <div class="fg" style="flex:1"><label>Aguinaldo ($)</label><input type="number" id="ch-agui" value="60"></div>
+          <div class="fg" style="flex:1"><label>EPP ($)</label><input type="number" id="ch-epp" value="80.22"></div>
+        </div>
+        <div class="fr" style="margin-top:0">
+          <div class="fg" style="flex:1"><label>Vianda ($)</label><input type="number" id="ch-vianda" value="88.8"></div>
+          <div class="fg" style="flex:1"><label>Agua ($)</label><input type="number" id="ch-agua" value="185"></div>
+        </div>
+      </div>
+      <div class="dvd" style="margin:14px 0"></div>
+      <div class="sttl">Empresas y COPA</div>
+      <div id="ch-empresas-list" style="margin-bottom:10px"></div>
+      <div class="fr" style="margin-top:8px">
+        <input type="text" id="ch-emp-nombre" placeholder="Nombre empresa" style="flex:2">
+        <input type="number" id="ch-emp-copa" placeholder="% COPA" style="width:90px" value="70">
+        <button class="btn btns btnp" id="btn-ch-add-emp">+ Agregar</button>
+      </div>
+    </div>
+  </div>
+  <!-- RESULTADOS -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="sttl" style="margin-bottom:0">Valor hora por empresa</div>
+      <button class="btn btns btnp" onclick="chCalcular()">&#8635; Calcular</button>
+    </div>
+    <div id="ch-resultado"></div>
+  </div>
+</div>
+
 </body>
 </html>
