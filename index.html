@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260407020033 -->
+<!-- JL Gestion v20260407020727 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1204,7 +1204,7 @@ function chCalcular() {
   var revMed   = (rm / dsem) / hd;
   var presAdc  = hb * pres;
   var fondoDes = hb * fd;
-  var provDesp = hb * pd / (dias * hd);
+  var provDesp = (hb * hd * dias * pd) / (176 * 6);
   var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
   var horaVia  = hb * (1 + cs) + totalAdc;
 
