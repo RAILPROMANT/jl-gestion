@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260407015024 -->
+<!-- JL Gestion v20260407020033 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -2533,6 +2533,13 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   el('p-srch').addEventListener('input', renderProv);
+
+  // Calculo Hora - recalcular al cambiar cualquier campo
+  var chInputIds = ['ch-hb','ch-cs','ch-dias','ch-hd','ch-dsem','ch-rm','ch-pres','ch-fd','ch-pd','ch-agui','ch-epp','ch-vianda','ch-agua'];
+  chInputIds.forEach(function(id) {
+    var e = el(id);
+    if (e) e.addEventListener('input', function() { if (el('ch-resultado').innerHTML) chCalcular(); });
+  });
 
   // ======= PRESUPUESTO JL =======
   var PJL_DEFAULT_ITEMS = [
