@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- JL Gestion v20260407023359 -->
+<!-- JL Gestion v20260408031818 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -251,6 +251,7 @@ select option{background:var(--bg2)}
     <div class="nb" data-tab="valorhora">Cálculo Valor Hora</div>
     <div class="nb" data-tab="cfg">Configuraci&#243;n</div>
     <div class="nb" data-tab="calchora">C&#225;lculo Hora</div>
+    <div class="nb" data-tab="horas">Horas obra</div>
   </div>
   <div class="body">
 
@@ -1313,6 +1314,88 @@ function chCalcularUOCRA() {
     + '<th style="text-align:right">Gan. vs Parada</th>'
     + empHeaders
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+// ═══════════════════════════════════════
+// HORAS OBRA
+// ═══════════════════════════════════════
+var horasData = {};
+
+function horasCargar() {
+  DB.ref('jl_horas').once('value').then(function(snap) {
+    horasData = snap.val() || {};
+    horasRender();
+  }).catch(function() {});
+  // Listen realtime
+  DB.ref('jl_horas').on('value', function(snap) {
+    horasData = snap.val() || {};
+    horasRender();
+  });
+}
+
+function horasRender() {
+  var filtroObra = (el('horas-filtro-obra') || {}).value || '';
+  // Flatten all records
+  var todos = [];
+  Object.keys(horasData).forEach(function(obraId) {
+    var regs = horasData[obraId];
+    if (!regs) return;
+    Object.keys(regs).forEach(function(regId) {
+      var r = regs[regId];
+      if (filtroObra && obraId !== filtroObra) return;
+      todos.push(r);
+    });
+  });
+  todos.sort(function(a, b) { return b.timestamp - a.timestamp; });
+
+  // KPIs
+  var totalHn = todos.reduce(function(a, r) { return a + (r.hn || 0); }, 0);
+  var totalHe = todos.reduce(function(a, r) { return a + (r.he || 0); }, 0);
+  var totalCosto = todos.reduce(function(a, r) { return a + (r.costoTotal || 0); }, 0);
+  if (el('horas-kpis')) {
+    el('horas-kpis').innerHTML =
+      '<div class="kpi"><div class="kl">Registros</div><div class="kv">' + todos.length + '</div></div>' +
+      '<div class="kpi"><div class="kl">Hs normales</div><div class="kv">' + totalHn + '</div></div>' +
+      '<div class="kpi"><div class="kl">Hs extras</div><div class="kv">' + totalHe + '</div></div>' +
+      '<div class="kpi"><div class="kl">Costo total MO</div><div class="kv" style="font-size:16px;color:var(--red2)">' + $f(totalCosto) + '</div></div>';
+  }
+
+  // Populate obra filter
+  var obrasSel = el('horas-filtro-obra');
+  if (obrasSel) {
+    var prev = obrasSel.value;
+    var obras = {};
+    todos.forEach(function(r) { if (r.obraId) obras[r.obraId] = r.obraLabel || r.obraId; });
+    obrasSel.innerHTML = '<option value="">Todas las obras</option>' +
+      Object.keys(obras).map(function(id) {
+        return '<option value="' + id + '"' + (id === prev ? ' selected' : '') + '>' + obras[id] + '</option>';
+      }).join('');
+  }
+
+  // Table
+  if (!todos.length) {
+    el('horas-tabla').innerHTML = '<div class="empty">Sin registros de horas</div>';
+    return;
+  }
+  el('horas-tabla').innerHTML = '<div style="overflow-x:auto"><table>' +
+    '<thead><tr><th>Fecha</th><th>Obra/OC</th><th>Operario</th><th>Categor&#237;a</th>' +
+    '<th style="text-align:right">Hn</th><th style="text-align:right">He</th>' +
+    '<th style="text-align:right">Costo Hn</th><th style="text-align:right">Costo He</th>' +
+    '<th style="text-align:right">Total</th></tr></thead><tbody>' +
+    todos.map(function(r) {
+      return '<tr>' +
+        '<td>' + (r.fecha || '') + '</td>' +
+        '<td style="font-weight:600">' + (r.obraLabel || r.obraId || '') + '</td>' +
+        '<td>' + (r.operarioNombre || '') + '</td>' +
+        '<td><span class="bdgy">' + (r.categoriaLabel || '') + '</span></td>' +
+        '<td style="text-align:right">' + (r.hn || 0) + '</td>' +
+        '<td style="text-align:right">' + (r.he || 0) + '</td>' +
+        '<td style="text-align:right">' + $f(r.costoHn || 0) + '</td>' +
+        '<td style="text-align:right">' + $f(r.costoHe || 0) + '</td>' +
+        '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(r.costoTotal || 0) + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table></div>';
 }
 
 // ═══════════════════════════════════════
@@ -2454,6 +2537,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
     if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){chRenderEmpresas();chCalcular();chCalcularCostoUOCRA();uocraRenderTabla();chCalcularUOCRA();},60);return;}
+    if(t.dataset&&t.dataset.tab==='horas'){setTimeout(function(){horasCargar();},60);return;}
     if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-bdb'){setTimeout(function(){gpDbRender();},60);return;}
@@ -2731,6 +2815,9 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   el('p-srch').addEventListener('input', renderProv);
+  document.addEventListener('change', function(e) {
+    if (e.target.id === 'horas-filtro-obra') horasRender();
+  });
 
   // Ganancia pct auto-recalc
   var ganEl = el('ch-gan-pct');
@@ -3066,6 +3153,29 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
     <div id="uocra-resultado"></div>
+  </div>
+</div>
+
+<div id="horas" class="page">
+  <div class="kpis" id="horas-kpis" style="margin-bottom:14px"></div>
+  <div class="two">
+    <div class="card">
+      <div class="sttl">Filtrar por obra</div>
+      <select id="horas-filtro-obra" style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--br2);border-radius:8px;color:var(--tx);font-size:13px">
+        <option value="">Todas las obras</option>
+      </select>
+    </div>
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div class="sttl" style="margin-bottom:4px">App del encargado</div>
+        <div style="font-size:12px;color:var(--txm)">Para registrar horas en obra</div>
+      </div>
+      <a href="encargado.html" target="_blank" class="btn btnp" style="text-decoration:none;white-space:nowrap">Abrir app &#8599;</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="sttl">Registros de horas</div>
+    <div id="horas-tabla"><div class="empty">Sin registros</div></div>
   </div>
 </div>
 
