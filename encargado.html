@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0a0c">
+<title>JL — Registro de Horas</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#0a0a0c;--bg1:#111116;--bg2:#18181f;--bg3:#1e1e26;
+  --br:rgba(255,255,255,.08);--br2:rgba(255,255,255,.14);
+  --tx:#f0f0f4;--txm:#888898;
+  --red:#dc2626;--red2:#ef4444;--redd:rgba(220,38,38,.13);
+  --grn:#22c55e;--grnd:rgba(34,197,94,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Outfit',system-ui,sans-serif}
+html,body{min-height:100%;background:var(--bg);color:var(--tx);font-size:15px}
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+
+/* Header */
+.hdr{background:var(--bg1);border-bottom:1px solid var(--br);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.hdr-logo{display:flex;align-items:center;gap:10px}
+.hdr-logo svg{flex-shrink:0}
+.hdr-title{font-weight:800;font-size:15px;letter-spacing:-.3px}
+.hdr-sub{font-size:11px;color:var(--txm)}
+.offline-badge{display:none;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:#f59e0b;border-radius:99px;padding:4px 10px;font-size:11px;font-weight:700}
+.offline-badge.show{display:block}
+
+/* Content */
+.body{padding:18px;max-width:560px;margin:0 auto}
+
+/* Card */
+.card{background:var(--bg1);border:1px solid var(--br);border-radius:14px;padding:18px;margin-bottom:14px}
+.sttl{font-size:10px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
+
+/* Form */
+.fg{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.fg label{font-size:10px;color:var(--txm);font-weight:700;text-transform:uppercase;letter-spacing:.7px}
+.fg input,.fg select{padding:12px 14px;font-size:14px;font-family:inherit;background:var(--bg2);border:1px solid var(--br2);border-radius:10px;color:var(--tx);outline:none;transition:border-color .15s;width:100%}
+.fg input:focus,.fg select:focus{border-color:var(--red)}
+.fg select option{background:var(--bg2)}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* Button */
+.btn-save{width:100%;padding:15px;background:var(--red);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .2s;margin-top:4px}
+.btn-save:hover{background:#b91c1c}
+.btn-save:disabled{background:#444;cursor:not-allowed}
+
+/* Alerts */
+.alert-ok{background:var(--grnd);border:1px solid rgba(34,197,94,.25);border-radius:10px;padding:12px 16px;font-size:13px;color:var(--grn);margin-bottom:14px;display:none}
+.alert-err{background:var(--redd);border:1px solid rgba(220,38,38,.25);border-radius:10px;padding:12px 16px;font-size:13px;color:var(--red2);margin-bottom:14px;display:none}
+.alert-offline{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:12px 16px;font-size:13px;color:#f59e0b;margin-bottom:14px;display:none}
+
+/* Pending list */
+.pending-item{background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.pending-info{font-size:13px}
+.pending-info strong{display:block;margin-bottom:2px}
+.pending-info span{color:var(--txm);font-size:11px}
+.pending-badge{background:rgba(245,158,11,.15);color:#f59e0b;border-radius:99px;padding:3px 9px;font-size:10px;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">
+    <svg viewBox="0 0 110 76" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="25">
+      <path d="M 18 52 C 8 44 6 30 18 20 C 28 12 46 8 62 10" stroke="#5a6070" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <path d="M 48 66 C 68 72 90 66 98 54 C 106 42 100 26 84 18" stroke="#dc2626" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <text x="22" y="57" font-family="Arial" font-weight="900" font-size="42" fill="#dc2626" letter-spacing="-2">J</text>
+      <text x="54" y="57" font-family="Arial" font-weight="900" font-size="42" fill="#5a6070" letter-spacing="-2">L</text>
+    </svg>
+    <div>
+      <div class="hdr-title">Registro de Horas</div>
+      <div class="hdr-sub">App del encargado</div>
+    </div>
+  </div>
+  <div class="offline-badge" id="offline-badge">Sin conexión</div>
+</div>
+
+<div class="body">
+
+  <div id="alert-ok" class="alert-ok">✓ Registro guardado correctamente</div>
+  <div id="alert-err" class="alert-err" id="alert-err"></div>
+  <div id="alert-offline" class="alert-offline">⚠ Sin internet — guardado localmente. Se sincronizará al reconectarse.</div>
+
+  <div class="card">
+    <div class="sttl">Nuevo registro de horas</div>
+
+    <div class="fg">
+      <label>Orden de compra / Obra</label>
+      <select id="f-oc">
+        <option value="">— Cargando obras... —</option>
+      </select>
+    </div>
+
+    <div class="fg">
+      <label>Operario</label>
+      <select id="f-operario">
+        <option value="">— Cargando operarios... —</option>
+      </select>
+    </div>
+
+    <div class="fg">
+      <label>Categoría UOCRA</label>
+      <input type="text" id="f-categoria" readonly placeholder="Se completa automáticamente">
+    </div>
+
+    <div class="fg">
+      <label>Fecha</label>
+      <input type="date" id="f-fecha">
+    </div>
+
+    <div class="fr">
+      <div class="fg">
+        <label>Horas normales</label>
+        <input type="number" id="f-hn" min="0" step="0.5" value="8" placeholder="0">
+      </div>
+      <div class="fg">
+        <label>Horas extras</label>
+        <input type="number" id="f-he" min="0" step="0.5" value="0" placeholder="0">
+      </div>
+    </div>
+
+    <div id="f-costo-preview" style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;display:none">
+      <div style="color:var(--txm);margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:.7px;font-weight:700">Costo estimado</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <div><span style="color:var(--txm)">Hs normales: </span><strong id="prev-hn-cost">$0</strong></div>
+        <div><span style="color:var(--txm)">Hs extras: </span><strong id="prev-he-cost">$0</strong></div>
+        <div><span style="color:var(--txm)">Total: </span><strong id="prev-total" style="color:var(--red2)">$0</strong></div>
+      </div>
+    </div>
+
+    <button class="btn-save" id="btn-guardar" onclick="guardarRegistro()">💾 Guardar registro</button>
+  </div>
+
+  <div class="card" id="card-pending" style="display:none">
+    <div class="sttl">Pendientes de sincronizar (<span id="pending-count">0</span>)</div>
+    <div id="pending-list"></div>
+  </div>
+
+</div>
+
+<script>
+// Firebase
+var firebaseConfig = {
+  apiKey: "AIzaSyB8k4RgsCeo7LO2oR_JUCQx0OpVSfhJbmY",
+  authDomain: "gestion-jl.firebaseapp.com",
+  databaseURL: "https://gestion-jl-default-rtdb.firebaseio.com",
+  projectId: "gestion-jl",
+  storageBucket: "gestion-jl.firebasestorage.app",
+  messagingSenderId: "1033671194062",
+  appId: "1:1033671194062:web:c9c71c6d59266bc215e79f"
+};
+firebase.initializeApp(firebaseConfig);
+var DB = firebase.database();
+
+var isOnline = navigator.onLine;
+var S = { emp: [], obras: [], oc: [] };
+var UOCRA_CATS = {
+  'oe': { label: 'Of. Especializado', basico: 5470 },
+  'of': { label: 'Oficial',           basico: 4679 },
+  'mo': { label: 'Medio Oficial',     basico: 4324 },
+  'ay': { label: 'Ayudante',          basico: 3980 }
+};
+
+function $f(n) { return '$' + Math.round(n).toLocaleString('es-AR'); }
+function el(id) { return document.getElementById(id); }
+function today() { return new Date().toISOString().slice(0, 10); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+// Offline detection
+window.addEventListener('online',  function() { isOnline = true;  updateOnlineBadge(); syncPending(); });
+window.addEventListener('offline', function() { isOnline = false; updateOnlineBadge(); });
+
+function updateOnlineBadge() {
+  el('offline-badge').classList.toggle('show', !isOnline);
+}
+
+// Load data from Firebase or localStorage
+function cargarDatos() {
+  el('f-fecha').value = today();
+  var local = localStorage.getItem('jl_data');
+  if (local) {
+    try { var d = JSON.parse(local); S.emp = d.emp||[]; S.obras = d.obras||[]; S.oc = d.oc||[]; } catch(e) {}
+  }
+  poblarSelectores();
+  if (isOnline) {
+    DB.ref('jl_data').once('value').then(function(snap) {
+      var d = snap.val();
+      if (d) {
+        S.emp = d.emp || [];
+        S.obras = d.obras || [];
+        S.oc = d.oc || [];
+        try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
+        poblarSelectores();
+      }
+    }).catch(function() {});
+  }
+}
+
+function poblarSelectores() {
+  // Obras/OC
+  var ocSel = el('f-oc');
+  var ocOpts = '<option value="">— Seleccioná obra/OC —</option>';
+
+  // Usar OC si hay, sino obras
+  if (S.oc && S.oc.length) {
+    S.oc.forEach(function(oc) {
+      var label = (oc.nro || 'OC') + (oc.desc ? ' — ' + oc.desc : '');
+      ocOpts += '<option value="' + oc.id + '">' + label + '</option>';
+    });
+  } else if (S.obras && S.obras.length) {
+    S.obras.forEach(function(o) {
+      ocOpts += '<option value="' + o.id + '">' + (o.nombre || o.id) + (o.cliente ? ' (' + o.cliente + ')' : '') + '</option>';
+    });
+  } else {
+    ocOpts += '<option value="" disabled>Sin obras cargadas</option>';
+  }
+  ocSel.innerHTML = ocOpts;
+
+  // Operarios
+  var opSel = el('f-operario');
+  var opOpts = '<option value="">— Seleccioná operario —</option>';
+  if (S.emp && S.emp.length) {
+    S.emp.forEach(function(e) {
+      var uLabel = UOCRA_CATS[e.cat] ? UOCRA_CATS[e.cat].label : e.cat;
+      opOpts += '<option value="' + e.id + '" data-cat="' + e.cat + '">' + e.nombre + ' — ' + uLabel + '</option>';
+    });
+  } else {
+    opOpts += '<option value="" disabled>Sin operarios cargados</option>';
+  }
+  opSel.innerHTML = opOpts;
+}
+
+// Auto-fill categoria and preview cost
+el('f-operario').addEventListener('change', function() {
+  var opt = this.options[this.selectedIndex];
+  var cat = opt ? opt.dataset.cat : '';
+  var uCat = UOCRA_CATS[cat];
+  el('f-categoria').value = uCat ? uCat.label : '';
+  calcularPreview();
+});
+
+el('f-hn').addEventListener('input', calcularPreview);
+el('f-he').addEventListener('input', calcularPreview);
+
+function calcularPreview() {
+  var opt = el('f-operario').options[el('f-operario').selectedIndex];
+  var cat = opt ? opt.dataset.cat : '';
+  var uCat = UOCRA_CATS[cat];
+  if (!uCat) { el('f-costo-preview').style.display = 'none'; return; }
+
+  var basico = uCat.basico;
+  var cs = 0.45;
+  var hn = parseFloat(el('f-hn').value) || 0;
+  var he = parseFloat(el('f-he').value) || 0;
+
+  // Hora normal = basico * (1 + CS) + adicionales fijos
+  var adicFijos = 80.22 + 88.8 + 185 + 60; // EPP + vianda + agua + aguinaldo
+  var horaBase = basico * (1 + cs) + adicFijos;
+  var horaExtra = horaBase * 2; // horas extras al 100%
+
+  var costoHn = horaBase * hn;
+  var costoHe = horaExtra * he;
+  var total = costoHn + costoHe;
+
+  el('prev-hn-cost').textContent = $f(costoHn);
+  el('prev-he-cost').textContent = $f(costoHe);
+  el('prev-total').textContent = $f(total);
+  el('f-costo-preview').style.display = 'block';
+}
+
+function guardarRegistro() {
+  var ocId     = el('f-oc').value;
+  var opId     = el('f-operario').value;
+  var fecha    = el('f-fecha').value;
+  var hn       = parseFloat(el('f-hn').value) || 0;
+  var he       = parseFloat(el('f-he').value) || 0;
+
+  if (!ocId || !opId || !fecha) {
+    showAlert('alert-err', 'Completá obra, operario y fecha.');
+    return;
+  }
+
+  var opt = el('f-operario').options[el('f-operario').selectedIndex];
+  var cat = opt ? opt.dataset.cat : '';
+  var empNombre = S.emp.find(function(e) { return e.id === opId; });
+  var uCat = UOCRA_CATS[cat];
+  var basico = uCat ? uCat.basico : 5470;
+  var cs = 0.45;
+  var adicFijos = 80.22 + 88.8 + 185 + 60;
+  var horaBase  = basico * (1 + cs) + adicFijos;
+  var horaExtra = horaBase * 2;
+  var costoTotal = horaBase * hn + horaExtra * he;
+
+  // Get obra/OC label
+  var ocOpt = el('f-oc').options[el('f-oc').selectedIndex];
+  var ocLabel = ocOpt ? ocOpt.text : ocId;
+
+  var registro = {
+    id: uid(),
+    timestamp: Date.now(),
+    fecha: fecha,
+    obraId: ocId,
+    obraLabel: ocLabel,
+    operarioId: opId,
+    operarioNombre: empNombre ? empNombre.nombre : opId,
+    categoria: cat,
+    categoriaLabel: uCat ? uCat.label : cat,
+    hn: hn,
+    he: he,
+    costoHn: Math.round(horaBase * hn),
+    costoHe: Math.round(horaExtra * he),
+    costoTotal: Math.round(costoTotal),
+    sincronizado: false
+  };
+
+  // Save locally always
+  var pendientes = getPendientes();
+  pendientes.push(registro);
+  localStorage.setItem('jl_horas_pendientes', JSON.stringify(pendientes));
+
+  if (isOnline) {
+    subirRegistro(registro, function(ok) {
+      if (ok) {
+        showAlert('alert-ok', '✓ Registro guardado y sincronizado.');
+        resetForm();
+      } else {
+        showAlert('alert-offline', '⚠ Guardado localmente. Se sincronizará al reconectarse.');
+        resetForm();
+      }
+      renderPendientes();
+    });
+  } else {
+    showAlert('alert-offline', '⚠ Sin internet — guardado localmente. Se sincronizará al reconectarse.');
+    resetForm();
+    renderPendientes();
+  }
+}
+
+function subirRegistro(reg, cb) {
+  DB.ref('jl_horas/' + reg.obraId + '/' + reg.id).set(reg)
+    .then(function() {
+      // Mark as synced in local
+      var pend = getPendientes().filter(function(r) { return r.id !== reg.id; });
+      localStorage.setItem('jl_horas_pendientes', JSON.stringify(pend));
+      if (cb) cb(true);
+    })
+    .catch(function() { if (cb) cb(false); });
+}
+
+function syncPending() {
+  var pendientes = getPendientes();
+  if (!pendientes.length) return;
+  pendientes.forEach(function(reg) {
+    subirRegistro(reg, function() { renderPendientes(); });
+  });
+}
+
+function getPendientes() {
+  try { return JSON.parse(localStorage.getItem('jl_horas_pendientes') || '[]'); } catch(e) { return []; }
+}
+
+function renderPendientes() {
+  var pend = getPendientes();
+  var card = el('card-pending');
+  if (!pend.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  el('pending-count').textContent = pend.length;
+  el('pending-list').innerHTML = pend.map(function(r) {
+    return '<div class="pending-item">'
+      + '<div class="pending-info"><strong>' + r.operarioNombre + '</strong>'
+      + '<span>' + r.obraLabel + ' · ' + r.fecha + ' · ' + r.hn + 'hn + ' + r.he + 'he</span></div>'
+      + '<span class="pending-badge">Pendiente</span>'
+      + '</div>';
+  }).join('');
+}
+
+function resetForm() {
+  el('f-oc').value = '';
+  el('f-operario').value = '';
+  el('f-categoria').value = '';
+  el('f-fecha').value = today();
+  el('f-hn').value = '8';
+  el('f-he').value = '0';
+  el('f-costo-preview').style.display = 'none';
+}
+
+function showAlert(id, msg) {
+  ['alert-ok','alert-err','alert-offline'].forEach(function(a) {
+    el(a).style.display = 'none';
+  });
+  var el2 = el(id);
+  el2.textContent = msg;
+  el2.style.display = 'block';
+  setTimeout(function() { el2.style.display = 'none'; }, 4000);
+}
+
+// Init
+updateOnlineBadge();
+cargarDatos();
+renderPendientes();
+if (isOnline) syncPending();
+</script>
+</body>
+</html>
