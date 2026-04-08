@@ -277,42 +277,38 @@ select option{background:var(--bg2)}
     </div>
     <div id="pers" class="page">
       <div class="stabs">
-        <div class="st on" data-sub="pers-emp">Empleados y horas</div>
+        <div class="st on" data-sub="pers-mo">Mano de obra</div>
+        <div class="st" data-sub="pers-obra">Por obra</div>
         <div class="st" data-sub="pers-tar">Tarifas</div>
-        <div class="st" data-sub="pers-rep">Reporte</div>
       </div>
-      <div id="pers-emp" class="sp on">
+      <!-- Resumen MO por operario -->
+      <div id="pers-mo" class="sp on">
         <div class="kpis" id="kpi-pers"></div>
         <div class="card">
-          <div class="sttl">Registro de horas</div>
-          <div id="emp-tbl"><div class="empty">Sin empleados.</div></div>
-          <div class="dvd"></div>
-          <div class="sttl">Agregar empleado</div>
-          <div class="fr">
-            <div class="fg" style="flex:2;min-width:140px"><label>Nombre completo</label><input type="text" id="e-nom" placeholder="Nombre y apellido"></div>
-            <div class="fg" style="min-width:180px"><label>Categor&#237;a</label><select id="e-cat"></select></div>
-            <div class="fg"><label>Hs normales</label><input type="number" id="e-hn" value="184" min="0"></div>
-            <div class="fg"><label>Hs extra</label><input type="number" id="e-he" value="0" min="0"></div>
-            <button class="btn btnp" id="btn-add-emp" style="align-self:flex-end">+ Agregar</button>
-          </div>
+          <div class="sttl">Resumen por operario</div>
+          <div id="pers-mo-tbl"><div class="empty">Cargando datos&#8230;</div></div>
         </div>
       </div>
+      <!-- MO por obra -->
+      <div id="pers-obra" class="sp">
+        <div class="card" style="margin-bottom:14px">
+          <div class="fr" style="margin-top:0">
+            <div class="fg" style="flex:1">
+              <label>Filtrar por obra</label>
+              <select id="pers-filtro-obra" style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--br2);border-radius:8px;color:var(--tx);font-size:13px">
+                <option value="">Todas las obras</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div id="pers-obra-tbl"><div class="empty">Sin registros</div></div>
+      </div>
+      <!-- Tarifas UOCRA -->
       <div id="pers-tar" class="sp">
         <div class="card">
           <div class="sttl">Tarifas &#8212; edit&#225; el margen para recalcular precio de venta</div>
           <table><thead><tr><th>Categor&#237;a</th><th>Costo empleador/h</th><th>Precio venta/h</th><th>Margen (%)</th></tr></thead><tbody id="rates-tbl"></tbody></table>
         </div>
-      </div>
-      <div id="pers-rep" class="sp">
-        <div class="card">
-          <div class="sttl">Filtro por per&#237;odo</div>
-          <div class="fr" style="margin-top:0">
-            <div class="fg"><label>Desde</label><input type="date" id="rep-desde"></div>
-            <div class="fg"><label>Hasta</label><input type="date" id="rep-hasta"></div>
-            <button class="btn btnp" id="btn-rpt-horas">Generar reporte</button>
-          </div>
-        </div>
-        <div id="rpt-hs"></div>
       </div>
     </div>
 
@@ -1427,7 +1423,6 @@ function goSub(subId) {
 }
 
 function reBuild() {
-  var ec = el('e-cat'); if (ec) ec.innerHTML = S.rates.map(function(r) { return '<option value="' + r.id + '">' + r.l + '</option>'; }).join('');
   var sc = el('s-cat'); if (sc) sc.innerHTML = Object.keys(S.db).map(function(k) { return '<option>' + k + '</option>'; }).join('');
   var pr = el('pm-rub'); if (pr) pr.innerHTML = '<option value="">\u2014 Sin clasificar \u2014</option>' + S.rubros.map(function(r) { return '<option>' + r + '</option>'; }).join('');
   var pf = el('p-fil'); if (pf) { var cv = pf.value; pf.innerHTML = '<option value="">Todos los rubros</option>' + S.rubros.map(function(r) { return '<option' + (r === cv ? ' selected' : '') + '>' + r + '</option>'; }).join(''); }
@@ -1570,7 +1565,17 @@ function oTot(o) { return Object.values(o.items).flat().reduce(function(a, it) {
 // DASHBOARD
 // ═══════════════════════════════════════
 function rDash() {
-  var tC = S.emp.reduce(function(a, e) { return a + gEC(e); }, 0);
+  // KPI Personal: operarios únicos y costo MO desde registros reales de Firebase
+  var hd = (typeof horasData !== 'undefined') ? horasData : {};
+  var opUnicos = {}, costoMO = 0;
+  Object.keys(hd).forEach(function(oId) {
+    var regs = hd[oId]; if (!regs) return;
+    Object.keys(regs).forEach(function(rId) {
+      var r = regs[rId];
+      if (r.operarioNombre) opUnicos[r.operarioNombre] = true;
+      costoMO += (r.costoTotal || 0);
+    });
+  });
   var al = S.stock.filter(function(s) { return s.qty <= s.qmin; });
   var hist = (typeof GP !== 'undefined' && GP.historial) ? GP.historial : [];
   var gpPend = hist.filter(function(h){ return h.estado === 'Pendiente de respuesta'; }).length;
@@ -1580,8 +1585,8 @@ function rDash() {
   var gpFact = hist.filter(function(h){ return h.estado === 'Finalizado'; }).reduce(function(a,h){ return a+(h.total||0); },0);
 
   // KPIs
-  el('k-emp').textContent = S.emp.length;
-  el('k-cos').textContent = 'costo ' + $f(tC);
+  el('k-emp').textContent = Object.keys(opUnicos).length;
+  el('k-cos').textContent = 'MO ' + $f(costoMO);
   el('k-prv').textContent = S.proveedores.length;
   if(el('k-pres-tot')) el('k-pres-tot').textContent = hist.length;
   if(el('k-pres-sub')) el('k-pres-sub').textContent = gpAsig + ' asignados';
@@ -1629,23 +1634,70 @@ function rDash() {
 // ═══════════════════════════════════════
 // PERSONAL
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+// PERSONAL — lee de horasData (Firebase)
+// ═══════════════════════════════════════
 function rPers() {
-  var t = { hn: 0, he: 0, c: 0, v: 0 };
-  S.emp.forEach(function(e) { t.hn += e.hn; t.he += e.he; t.c += gEC(e); t.v += gEV(e); });
-  el('kpi-pers').innerHTML = '<div class="kpi"><div class="kl">Empleados</div><div class="kv">' + S.emp.length + '</div></div><div class="kpi"><div class="kl">Hs normales</div><div class="kv">' + t.hn + '</div></div><div class="kpi"><div class="kl">Hs extra</div><div class="kv">' + t.he + '</div></div><div class="kpi"><div class="kl">Costo empleador</div><div class="kv" style="font-size:16px">' + $f(t.c) + '</div></div><div class="kpi"><div class="kl">Precio de venta</div><div class="kv" style="font-size:16px;color:var(--grn)">' + $f(t.v) + '</div></div>';
-  var empTbl = el('emp-tbl');
-  if (S.emp.length) {
-    var rows = S.emp.map(function(e) {
-      return '<tr data-id="' + e.id + '"><td style="font-weight:600">' + e.nombre + '</td><td><span class="bdgy">' + rL(e.cat) + '</span></td>' +
-        '<td><input type="number" class="emp-hn" data-id="' + e.id + '" value="' + e.hn + '" min="0"></td>' +
-        '<td><input type="number" class="emp-he" data-id="' + e.id + '" value="' + e.he + '" min="0"></td>' +
-        '<td style="color:var(--red2)">' + $f(gEC(e)) + '</td><td style="color:var(--grn);font-weight:600">' + $f(gEV(e)) + '</td>' +
-        '<td><button class="btn btns btnd del-emp" data-id="' + e.id + '">\u2715</button></td></tr>';
-    }).join('');
-    empTbl.innerHTML = '<div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Categor\u00eda</th><th>Hs norm.</th><th>Hs extra</th><th>Costo empleador</th><th>Precio de venta</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
-  } else {
-    empTbl.innerHTML = '<div class="empty">Sin empleados. Agreg\u00e1 el primero abajo.</div>';
+  var hd = (typeof horasData !== 'undefined') ? horasData : {};
+  var todos = [];
+  Object.keys(hd).forEach(function(obraId) {
+    var regs = hd[obraId]; if (!regs) return;
+    Object.keys(regs).forEach(function(rId) { todos.push(regs[rId]); });
+  });
+
+  // KPIs globales
+  var totalHn = todos.reduce(function(a, r) { return a + (r.hn || 0); }, 0);
+  var totalHe = todos.reduce(function(a, r) { return a + (r.he || 0); }, 0);
+  var totalCosto = todos.reduce(function(a, r) { return a + (r.costoTotal || 0); }, 0);
+  var opU = {}; todos.forEach(function(r) { if (r.operarioNombre) opU[r.operarioNombre] = true; });
+  var kpiEl = el('kpi-pers');
+  if (kpiEl) kpiEl.innerHTML =
+    '<div class="kpi"><div class="kl">Operarios</div><div class="kv">' + Object.keys(opU).length + '</div></div>' +
+    '<div class="kpi"><div class="kl">Registros</div><div class="kv">' + todos.length + '</div></div>' +
+    '<div class="kpi"><div class="kl">Hs normales</div><div class="kv">' + totalHn + '</div></div>' +
+    '<div class="kpi"><div class="kl">Hs extras</div><div class="kv">' + totalHe + '</div></div>' +
+    '<div class="kpi"><div class="kl">Costo total MO</div><div class="kv" style="font-size:15px;color:var(--red2)">' + $f(totalCosto) + '</div></div>';
+
+  // Resumen por operario
+  var perOp = {};
+  todos.forEach(function(r) {
+    var n = r.operarioNombre || 'Sin nombre';
+    if (!perOp[n]) perOp[n] = { nombre: n, hn: 0, he: 0, costo: 0, obras: {} };
+    perOp[n].hn += (r.hn || 0);
+    perOp[n].he += (r.he || 0);
+    perOp[n].costo += (r.costoTotal || 0);
+    if (r.obraLabel) perOp[n].obras[r.obraLabel] = true;
+  });
+  var moTbl = el('pers-mo-tbl');
+  if (moTbl) {
+    var opList = Object.values(perOp).sort(function(a, b) { return b.costo - a.costo; });
+    if (!opList.length) {
+      moTbl.innerHTML = '<div class="empty">Sin registros de horas en Firebase. Usá la app del encargado para cargar.</div>';
+    } else {
+      var rows = opList.map(function(op) {
+        return '<tr>' +
+          '<td style="font-weight:600">' + op.nombre + '</td>' +
+          '<td style="text-align:right">' + op.hn + '</td>' +
+          '<td style="text-align:right;color:var(--red2)">' + op.he + '</td>' +
+          '<td style="text-align:right;font-weight:700">' + (op.hn + op.he) + '</td>' +
+          '<td style="text-align:right;color:var(--red2);font-weight:700">' + $f(op.costo) + '</td>' +
+          '<td style="font-size:12px;color:var(--txm)">' + (Object.keys(op.obras).join(', ') || '—') + '</td></tr>';
+      }).join('');
+      var tot = opList.reduce(function(a, o) { return { hn: a.hn + o.hn, he: a.he + o.he, costo: a.costo + o.costo }; }, { hn: 0, he: 0, costo: 0 });
+      moTbl.innerHTML = '<div style="overflow-x:auto"><table>' +
+        '<thead><tr><th>Operario</th><th style="text-align:right">Hs norm.</th><th style="text-align:right">Hs extra</th><th style="text-align:right">Total hs</th><th style="text-align:right">Costo MO</th><th>Obras</th></tr></thead>' +
+        '<tbody>' + rows +
+        '<tr style="border-top:2px solid var(--br2);font-weight:700"><td>TOTAL</td>' +
+        '<td style="text-align:right">' + tot.hn + '</td><td style="text-align:right;color:var(--red2)">' + tot.he + '</td>' +
+        '<td style="text-align:right">' + (tot.hn + tot.he) + '</td><td style="text-align:right;color:var(--red2)">' + $f(tot.costo) + '</td><td></td></tr>' +
+        '</tbody></table></div>';
+    }
   }
+
+  // Por obra
+  rPersObra();
+
+  // Tarifas
   var rateRows = S.rates.map(function(r, i) {
     var m = r.c > 0 ? ((r.v - r.c) / r.c * 100).toFixed(1) : 0;
     return '<tr><td style="font-weight:600">' + r.l + '</td>' +
@@ -1653,50 +1705,70 @@ function rPers() {
       '<td><input type="number" class="rate-v" data-i="' + i + '" value="' + r.v + '" min="0"></td>' +
       '<td><input type="number" class="rate-m" data-i="' + i + '" value="' + m + '" min="0" step="0.1" style="width:80px"><span style="margin-left:4px;color:var(--txm);font-size:12px">%</span></td></tr>';
   }).join('');
-  el('rates-tbl').innerHTML = rateRows;
+  if (el('rates-tbl')) el('rates-tbl').innerHTML = rateRows;
 }
 
-function addEmp() {
-  var n = el('e-nom').value.trim(); if (!n) return;
-  S.emp.push({ id: uid(), nombre: n, cat: el('e-cat').value, hn: +el('e-hn').value, he: +el('e-he').value });
-  el('e-nom').value = ''; sv(); rPers(); rDash();
-}
-
-function rptHoras() {
-  var desde = el('rep-desde').value, hasta = el('rep-hasta').value;
-  var div = el('rpt-hs');
-  if (!S.emp.length) { div.innerHTML = '<div class="card empty">Sin empleados.</div>'; return; }
-  var tHn = S.emp.reduce(function(a, e) { return a + e.hn; }, 0);
-  var tHe = S.emp.reduce(function(a, e) { return a + e.he; }, 0);
-  var tC = S.emp.reduce(function(a, e) { return a + gEC(e); }, 0);
-  var tV = S.emp.reduce(function(a, e) { return a + gEV(e); }, 0);
-  var rows = S.emp.map(function(e) {
-    return '<tr><td style="font-weight:600">' + e.nombre + '</td><td><span class="bdgy">' + rL(e.cat) + '</span></td>' +
-      '<td style="text-align:center">' + e.hn + '</td><td style="text-align:center;color:var(--red2);font-weight:600">' + e.he + '</td>' +
-      '<td style="text-align:center;font-weight:600">' + (e.hn + e.he) + '</td>' +
-      '<td style="text-align:right;color:var(--red2)">' + $f(gEC(e)) + '</td>' +
-      '<td style="text-align:right;color:var(--grn);font-weight:600">' + $f(gEV(e)) + '</td></tr>';
+function rPersObra() {
+  var hd = (typeof horasData !== 'undefined') ? horasData : {};
+  var filtro = (el('pers-filtro-obra') || {}).value || '';
+  // Poblar filtro
+  var obrasSel = el('pers-filtro-obra');
+  if (obrasSel) {
+    var prev = obrasSel.value;
+    var obras = {};
+    Object.keys(hd).forEach(function(obraId) {
+      var regs = hd[obraId]; if (!regs) return;
+      Object.keys(regs).forEach(function(rId) {
+        var r = regs[rId];
+        if (r.obraId) obras[r.obraId] = r.obraLabel || r.obraId;
+      });
+    });
+    obrasSel.innerHTML = '<option value="">Todas las obras</option>' +
+      Object.keys(obras).map(function(id) {
+        return '<option value="' + id + '"' + (id === prev ? ' selected' : '') + '>' + obras[id] + '</option>';
+      }).join('');
+  }
+  // Agrupar por obra
+  var perObra = {};
+  Object.keys(hd).forEach(function(obraId) {
+    var regs = hd[obraId]; if (!regs) return;
+    if (filtro && obraId !== filtro) return;
+    Object.keys(regs).forEach(function(rId) {
+      var r = regs[rId];
+      var lbl = r.obraLabel || obraId;
+      if (!perObra[lbl]) perObra[lbl] = { label: lbl, hn: 0, he: 0, costo: 0, operarios: {} };
+      perObra[lbl].hn += (r.hn || 0);
+      perObra[lbl].he += (r.he || 0);
+      perObra[lbl].costo += (r.costoTotal || 0);
+      if (r.operarioNombre) perObra[lbl].operarios[r.operarioNombre] = true;
+    });
+  });
+  var tbl = el('pers-obra-tbl');
+  if (!tbl) return;
+  var lista = Object.values(perObra).sort(function(a, b) { return b.costo - a.costo; });
+  if (!lista.length) {
+    tbl.innerHTML = '<div class="empty">Sin registros' + (filtro ? ' para esta obra' : '') + '</div>';
+    return;
+  }
+  var rows = lista.map(function(o) {
+    return '<tr>' +
+      '<td style="font-weight:600">' + o.label + '</td>' +
+      '<td style="text-align:right">' + o.hn + '</td>' +
+      '<td style="text-align:right;color:var(--red2)">' + o.he + '</td>' +
+      '<td style="text-align:right;font-weight:700">' + (o.hn + o.he) + '</td>' +
+      '<td style="text-align:right;color:var(--red2);font-weight:700">' + $f(o.costo) + '</td>' +
+      '<td style="font-size:12px;color:var(--txm)">' + (Object.keys(o.operarios).join(', ') || '—') + '</td></tr>';
   }).join('');
-  div.innerHTML = '<div class="card"><div style="font-weight:700;font-size:14px;margin-bottom:4px">Reporte de horas</div>' +
-    '<div style="font-size:12px;color:var(--txm);margin-bottom:14px">' + (desde && hasta ? desde + ' al ' + hasta : 'Todos los registros') + '</div>' +
-    '<div class="kpis" style="margin-bottom:14px">' +
-    '<div class="kpi"><div class="kl">Empleados</div><div class="kv">' + S.emp.length + '</div></div>' +
-    '<div class="kpi"><div class="kl">Hs normales</div><div class="kv">' + tHn + '</div></div>' +
-    '<div class="kpi"><div class="kl">Hs extra</div><div class="kv" style="color:var(--red2)">' + tHe + '</div></div>' +
-    '<div class="kpi"><div class="kl">Costo total</div><div class="kv" style="font-size:15px">' + $f(tC) + '</div></div>' +
-    '<div class="kpi"><div class="kl">Precio venta</div><div class="kv" style="font-size:15px;color:var(--grn)">' + $f(tV) + '</div></div>' +
-    '</div><div style="overflow-x:auto"><table><thead><tr><th>Empleado</th><th>Categor\u00eda</th>' +
-    '<th style="text-align:center">Hs norm.</th><th style="text-align:center">Hs extra</th>' +
-    '<th style="text-align:center">Total</th><th style="text-align:right">Costo</th><th style="text-align:right">Venta</th>' +
-    '</tr></thead><tbody>' + rows +
-    '<tr style="border-top:2px solid var(--br2)"><td colspan="2" style="font-weight:700">TOTAL</td>' +
-    '<td style="text-align:center;font-weight:700">' + tHn + '</td>' +
-    '<td style="text-align:center;font-weight:700;color:var(--red2)">' + tHe + '</td>' +
-    '<td style="text-align:center;font-weight:700">' + (tHn + tHe) + '</td>' +
-    '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(tC) + '</td>' +
-    '<td style="text-align:right;font-weight:700;color:var(--grn)">' + $f(tV) + '</td></tr>' +
-    '</tbody></table></div></div>';
+  var tot = lista.reduce(function(a, o) { return { hn: a.hn + o.hn, he: a.he + o.he, costo: a.costo + o.costo }; }, { hn: 0, he: 0, costo: 0 });
+  tbl.innerHTML = '<div style="overflow-x:auto"><table>' +
+    '<thead><tr><th>Obra / OC</th><th style="text-align:right">Hs norm.</th><th style="text-align:right">Hs extra</th><th style="text-align:right">Total hs</th><th style="text-align:right">Costo MO</th><th>Operarios</th></tr></thead>' +
+    '<tbody>' + rows +
+    '<tr style="border-top:2px solid var(--br2);font-weight:700"><td>TOTAL</td>' +
+    '<td style="text-align:right">' + tot.hn + '</td><td style="text-align:right;color:var(--red2)">' + tot.he + '</td>' +
+    '<td style="text-align:right">' + (tot.hn + tot.he) + '</td><td style="text-align:right;color:var(--red2)">' + $f(tot.costo) + '</td><td></td></tr>' +
+    '</tbody></table></div>';
 }
+
 
 // ═══════════════════════════════════════
 // PRESUPUESTO
@@ -2226,19 +2298,14 @@ document.addEventListener('DOMContentLoaded', function() {
     mo.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('on'); });
   });
 
-  // Personal
-  el('btn-add-emp').addEventListener('click', addEmp);
-  el('btn-rpt-horas').addEventListener('click', rptHoras);
+  // Personal — filtro por obra
+  document.addEventListener('change', function(e) {
+    if (e.target.id === 'pers-filtro-obra') rPersObra();
+  }, true);
 
   document.addEventListener('change', function(e) {
     var t = e.target;
-    if (t.classList.contains('emp-hn')) {
-      var emp = S.emp.find(function(x) { return x.id === t.dataset.id; });
-      if (emp) { emp.hn = +t.value; sv(); rPers(); rDash(); }
-    } else if (t.classList.contains('emp-he')) {
-      var emp2 = S.emp.find(function(x) { return x.id === t.dataset.id; });
-      if (emp2) { emp2.he = +t.value; sv(); rPers(); rDash(); }
-    } else if (t.classList.contains('rate-c')) {
+    if (t.classList.contains('rate-c')) {
       S.rates[+t.dataset.i].c = +t.value; sv(); rPers(); rDash();
     } else if (t.classList.contains('rate-v')) {
       S.rates[+t.dataset.i].v = +t.value; sv(); rPers(); rDash();
@@ -2351,7 +2418,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // DB cat selector
     if (t.dataset.dbcat) { S.dbCat = t.dataset.dbcat; rDB(); return; }
     // Dynamic buttons by class
-    if (t.classList.contains('del-emp')) { S.emp = S.emp.filter(function(x) { return x.id !== t.dataset.id; }); sv(); rPers(); rDash(); return; }
     if (t.classList.contains('del-it')) { var cat3 = t.dataset.cat, iid2 = t.dataset.id; S.obras = S.obras.map(function(o) { if (o.id !== S.obraId) return o; var x = Object.assign({}, o); x.items = Object.assign({}, o.items); x.items[cat3] = (o.items[cat3] || []).filter(function(i) { return i.id !== iid2; }); return x; }); sv(); rPres(); rDash(); return; }
     if (t.classList.contains('del-dbcat')) { var k2 = t.dataset.k; if (Object.keys(S.db).length <= 1) { alert('Debe haber al menos una categor\u00eda.'); return; } if (!confirm('\u00bfEliminar "' + k2 + '" y sus ' + (S.db[k2] || []).length + ' \u00edtems?')) return; delete S.db[k2]; S.stock = S.stock.filter(function(s) { return s.cat !== k2; }); if (S.dbCat === k2) S.dbCat = Object.keys(S.db)[0]; sv(); rDB(); reBuild(); rMat(); return; }
     if (t.classList.contains('del-dbit')) { S.db[t.dataset.cat].splice(+t.dataset.i, 1); sv(); rDB(); return; }
