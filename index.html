@@ -279,6 +279,8 @@ select option{background:var(--bg2)}
       <div class="stabs">
         <div class="st on" data-sub="pers-mo">Mano de obra</div>
         <div class="st" data-sub="pers-obra">Por obra</div>
+        <div class="st" data-sub="pers-eq">Equipo</div>
+        <div class="st" data-sub="pers-rep">Reporte</div>
         <div class="st" data-sub="pers-tar">Tarifas</div>
       </div>
       <!-- Resumen MO por operario -->
@@ -302,6 +304,44 @@ select option{background:var(--bg2)}
           </div>
         </div>
         <div id="pers-obra-tbl"><div class="empty">Sin registros</div></div>
+      </div>
+      <!-- Equipo -->
+      <div id="pers-eq" class="sp">
+        <div class="kpis" id="kpi-eq"></div>
+        <div class="card">
+          <div class="sttl">Equipo de trabajo</div>
+          <div id="eq-tbl"><div class="empty">Sin empleados registrados.</div></div>
+          <div class="dvd"></div>
+          <div class="sttl">Agregar empleado</div>
+          <div class="fr">
+            <div class="fg" style="flex:2;min-width:140px"><label>Nombre completo</label><input type="text" id="eq-nom" placeholder="Nombre y apellido"></div>
+            <div class="fg" style="min-width:180px"><label>Categor&#237;a UOCRA</label><select id="eq-cat"></select></div>
+            <div class="fg" style="min-width:120px"><label>Legajo / CUIL</label><input type="text" id="eq-leg" placeholder="Opcional"></div>
+            <button class="btn btnp" id="btn-add-eq" style="align-self:flex-end">+ Agregar</button>
+          </div>
+        </div>
+      </div>
+      <!-- Reporte -->
+      <div id="pers-rep" class="sp">
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">Filtros</div>
+          <div class="fr" style="margin-top:0">
+            <div class="fg"><label>Desde</label><input type="date" id="pers-rep-desde"></div>
+            <div class="fg"><label>Hasta</label><input type="date" id="pers-rep-hasta"></div>
+            <div class="fg" style="min-width:180px"><label>Operario</label>
+              <select id="pers-rep-op" style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--br2);border-radius:8px;color:var(--tx);font-size:13px">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="fg" style="min-width:180px"><label>Obra</label>
+              <select id="pers-rep-obra" style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--br2);border-radius:8px;color:var(--tx);font-size:13px">
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <button class="btn btnp" id="btn-pers-rep" style="align-self:flex-end">Generar</button>
+          </div>
+        </div>
+        <div id="pers-rep-result"></div>
       </div>
       <!-- Tarifas UOCRA -->
       <div id="pers-tar" class="sp">
@@ -1423,6 +1463,7 @@ function goSub(subId) {
 }
 
 function reBuild() {
+  var ec = el('eq-cat'); if (ec) ec.innerHTML = S.rates.map(function(r) { return '<option value="' + r.id + '">' + r.l + '</option>'; }).join('');
   var sc = el('s-cat'); if (sc) sc.innerHTML = Object.keys(S.db).map(function(k) { return '<option>' + k + '</option>'; }).join('');
   var pr = el('pm-rub'); if (pr) pr.innerHTML = '<option value="">\u2014 Sin clasificar \u2014</option>' + S.rubros.map(function(r) { return '<option>' + r + '</option>'; }).join('');
   var pf = el('p-fil'); if (pf) { var cv = pf.value; pf.innerHTML = '<option value="">Todos los rubros</option>' + S.rubros.map(function(r) { return '<option' + (r === cv ? ' selected' : '') + '>' + r + '</option>'; }).join(''); }
@@ -1434,6 +1475,8 @@ function renderAll() {
   try { reBuild(); } catch(e) {}
   try { rDash(); } catch(e) {}
   try { rPers(); } catch(e) {}
+  try { rEq(); } catch(e) {}
+  try { rPersRepFiltros(); } catch(e) {}
   try { rPres(); } catch(e) {}
   try { rMat(); } catch(e) {}
   try { renderProv(); } catch(e) {}
@@ -1585,7 +1628,7 @@ function rDash() {
   var gpFact = hist.filter(function(h){ return h.estado === 'Finalizado'; }).reduce(function(a,h){ return a+(h.total||0); },0);
 
   // KPIs
-  el('k-emp').textContent = Object.keys(opUnicos).length;
+  el('k-emp').textContent = S.emp.length + (Object.keys(opUnicos).length ? ' (' + Object.keys(opUnicos).length + ' activos)' : '');
   el('k-cos').textContent = 'MO ' + $f(costoMO);
   el('k-prv').textContent = S.proveedores.length;
   if(el('k-pres-tot')) el('k-pres-tot').textContent = hist.length;
@@ -1768,6 +1811,170 @@ function rPersObra() {
     '<td style="text-align:right">' + (tot.hn + tot.he) + '</td><td style="text-align:right;color:var(--red2)">' + $f(tot.costo) + '</td><td></td></tr>' +
     '</tbody></table></div>';
 }
+
+// ═══════════════════════════════════════
+// PERSONAL — EQUIPO
+// ═══════════════════════════════════════
+function rEq() {
+  // Poblar select de categorías
+  var ec = el('eq-cat');
+  if (ec) ec.innerHTML = S.rates.map(function(r) { return '<option value="' + r.id + '">' + r.l + '</option>'; }).join('');
+
+  // KPIs
+  var kpi = el('kpi-eq');
+  if (kpi) kpi.innerHTML =
+    '<div class="kpi"><div class="kl">Empleados</div><div class="kv">' + S.emp.length + '</div></div>';
+
+  // Tabla
+  var tbl = el('eq-tbl');
+  if (!tbl) return;
+  if (!S.emp.length) {
+    tbl.innerHTML = '<div class="empty">Sin empleados. Agregá el primero abajo.</div>';
+    return;
+  }
+  var rows = S.emp.map(function(e) {
+    var catNombre = (S.rates.find(function(r) { return r.id === e.cat; }) || S.rates[0] || {}).l || e.cat;
+    return '<tr>' +
+      '<td style="font-weight:600">' + e.nombre + '</td>' +
+      '<td><span class="bdgy">' + catNombre + '</span></td>' +
+      '<td style="color:var(--txm);font-size:12px">' + (e.leg || '—') + '</td>' +
+      '<td><button class="btn btns btnd del-eq" data-id="' + e.id + '">✕</button></td>' +
+      '</tr>';
+  }).join('');
+  tbl.innerHTML = '<div style="overflow-x:auto"><table>' +
+    '<thead><tr><th>Nombre</th><th>Categoría UOCRA</th><th>Legajo / CUIL</th><th></th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div>';
+}
+
+function addEq() {
+  var n = (el('eq-nom') || {}).value; if (!n || !n.trim()) return;
+  var cat = (el('eq-cat') || {}).value || (S.rates[0] || {}).id || '';
+  var leg = (el('eq-leg') || {}).value || '';
+  S.emp.push({ id: uid(), nombre: n.trim(), cat: cat, leg: leg.trim() });
+  el('eq-nom').value = ''; if (el('eq-leg')) el('eq-leg').value = '';
+  sv(); rEq(); rDash();
+}
+
+// ═══════════════════════════════════════
+// PERSONAL — REPORTE
+// ═══════════════════════════════════════
+function rPersRepFiltros() {
+  var hd = (typeof horasData !== 'undefined') ? horasData : {};
+  var todos = [];
+  Object.keys(hd).forEach(function(obraId) {
+    var regs = hd[obraId]; if (!regs) return;
+    Object.keys(regs).forEach(function(rId) { todos.push(regs[rId]); });
+  });
+  // Poblar select operario
+  var selOp = el('pers-rep-op');
+  if (selOp) {
+    var ops = {}; todos.forEach(function(r) { if (r.operarioNombre) ops[r.operarioNombre] = true; });
+    selOp.innerHTML = '<option value="">Todos</option>' +
+      Object.keys(ops).sort().map(function(n) { return '<option>' + n + '</option>'; }).join('');
+  }
+  // Poblar select obra
+  var selObra = el('pers-rep-obra');
+  if (selObra) {
+    var obras = {}; todos.forEach(function(r) { if (r.obraLabel) obras[r.obraLabel] = true; });
+    selObra.innerHTML = '<option value="">Todas</option>' +
+      Object.keys(obras).sort().map(function(n) { return '<option>' + n + '</option>'; }).join('');
+  }
+}
+
+function generarRepPersonal() {
+  var hd = (typeof horasData !== 'undefined') ? horasData : {};
+  var desde = (el('pers-rep-desde') || {}).value || '';
+  var hasta  = (el('pers-rep-hasta')  || {}).value || '';
+  var filtOp   = (el('pers-rep-op')   || {}).value || '';
+  var filtObra = (el('pers-rep-obra') || {}).value || '';
+  var div = el('pers-rep-result');
+  if (!div) return;
+
+  // Aplanar y filtrar
+  var todos = [];
+  Object.keys(hd).forEach(function(obraId) {
+    var regs = hd[obraId]; if (!regs) return;
+    Object.keys(regs).forEach(function(rId) {
+      var r = regs[rId];
+      if (filtOp   && r.operarioNombre !== filtOp) return;
+      if (filtObra && r.obraLabel      !== filtObra) return;
+      if (desde && r.fecha && r.fecha < desde) return;
+      if (hasta && r.fecha && r.fecha > hasta) return;
+      todos.push(r);
+    });
+  });
+  todos.sort(function(a, b) { return (a.fecha || '') < (b.fecha || '') ? 1 : -1; });
+
+  if (!todos.length) {
+    div.innerHTML = '<div class="card empty">Sin registros para los filtros seleccionados.</div>';
+    return;
+  }
+
+  var tHn    = todos.reduce(function(a, r) { return a + (r.hn || 0); }, 0);
+  var tHe    = todos.reduce(function(a, r) { return a + (r.he || 0); }, 0);
+  var tCosto = todos.reduce(function(a, r) { return a + (r.costoTotal || 0); }, 0);
+
+  var rows = todos.map(function(r) {
+    return '<tr>' +
+      '<td>' + (r.fecha || '') + '</td>' +
+      '<td style="font-weight:600">' + (r.operarioNombre || '') + '</td>' +
+      '<td><span class="bdgy">' + (r.categoriaLabel || '') + '</span></td>' +
+      '<td>' + (r.obraLabel || r.obraId || '') + '</td>' +
+      '<td style="text-align:right">' + (r.hn || 0) + '</td>' +
+      '<td style="text-align:right;color:var(--red2)">' + (r.he || 0) + '</td>' +
+      '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(r.costoTotal || 0) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  var periodoTxt = (desde || hasta) ? ((desde || '?') + ' al ' + (hasta || 'hoy')) : 'Todos los registros';
+
+  div.innerHTML =
+    '<div class="card">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+    '<div><div style="font-weight:700;font-size:15px">Reporte de mano de obra</div>' +
+    '<div style="font-size:12px;color:var(--txm);margin-top:2px">' + periodoTxt +
+    (filtOp ? ' &bull; Operario: ' + filtOp : '') +
+    (filtObra ? ' &bull; Obra: ' + filtObra : '') + '</div></div>' +
+    '<button class="btn btns" onclick="exportRepCSV()">&#8595; Exportar CSV</button>' +
+    '</div>' +
+    '<div class="kpis" style="margin-bottom:14px">' +
+    '<div class="kpi"><div class="kl">Registros</div><div class="kv">' + todos.length + '</div></div>' +
+    '<div class="kpi"><div class="kl">Hs normales</div><div class="kv">' + tHn + '</div></div>' +
+    '<div class="kpi"><div class="kl">Hs extras</div><div class="kv" style="color:var(--red2)">' + tHe + '</div></div>' +
+    '<div class="kpi"><div class="kl">Total horas</div><div class="kv">' + (tHn + tHe) + '</div></div>' +
+    '<div class="kpi"><div class="kl">Costo total MO</div><div class="kv" style="font-size:15px;color:var(--red2)">' + $f(tCosto) + '</div></div>' +
+    '</div>' +
+    '<div style="overflow-x:auto"><table>' +
+    '<thead><tr><th>Fecha</th><th>Operario</th><th>Categoría</th><th>Obra / OC</th>' +
+    '<th style="text-align:right">Hs norm.</th><th style="text-align:right">Hs extra</th>' +
+    '<th style="text-align:right">Costo</th></tr></thead>' +
+    '<tbody>' + rows +
+    '<tr style="border-top:2px solid var(--br2);font-weight:700">' +
+    '<td colspan="4">TOTAL</td>' +
+    '<td style="text-align:right">' + tHn + '</td>' +
+    '<td style="text-align:right;color:var(--red2)">' + tHe + '</td>' +
+    '<td style="text-align:right;color:var(--red2)">' + $f(tCosto) + '</td></tr>' +
+    '</tbody></table></div></div>';
+
+  // Guardar datos para exportar
+  window._repData = todos;
+}
+
+function exportRepCSV() {
+  var datos = window._repData || [];
+  if (!datos.length) return;
+  var header = 'Fecha,Operario,Categoría,Obra/OC,Hs normales,Hs extras,Costo total\n';
+  var rows = datos.map(function(r) {
+    return [r.fecha||'', r.operarioNombre||'', r.categoriaLabel||'', r.obraLabel||r.obraId||'',
+            r.hn||0, r.he||0, r.costoTotal||0].join(',');
+  }).join('\n');
+  var blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href = url;
+  a.download = 'reporte_mo_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+
 
 
 // ═══════════════════════════════════════
@@ -2298,7 +2505,10 @@ document.addEventListener('DOMContentLoaded', function() {
     mo.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('on'); });
   });
 
-  // Personal — filtro por obra
+  // Personal — botones
+  el('btn-add-eq').addEventListener('click', addEq);
+  (el('eq-nom') || document.createElement('input')).addEventListener('keydown', function(e) { if (e.key === 'Enter') addEq(); });
+  el('btn-pers-rep').addEventListener('click', generarRepPersonal);
   document.addEventListener('change', function(e) {
     if (e.target.id === 'pers-filtro-obra') rPersObra();
   }, true);
@@ -2430,6 +2640,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (t.classList.contains('gp-del')) { GP.items.splice(+t.dataset.i, 1); gpRenderItems(); return; }
     if (t.classList.contains('gp-load')) { gpCargar(t.dataset.id); return; }
     if (t.classList.contains('gp-del-hist')) { if (!confirm('\u00bfEliminar?')) return; GP.historial = GP.historial.filter(function(x) { return x.id !== t.dataset.id; }); gpSv(); gpRenderHist(); return; }
+    if (t.classList.contains('del-eq')) { S.emp = S.emp.filter(function(x) { return x.id !== t.dataset.id; }); sv(); rEq(); rDash(); return; }
     if (t.classList.contains('del-cat')) { var i2 = +t.dataset.i; if (S.rates.length <= 1) return; S.rates.splice(i2, 1); sv(); rCfg(); reBuild(); rPers(); return; }
     if (t.classList.contains('del-rprov')) { S.rubros.splice(+t.dataset.i, 1); sv(); rCfg(); reBuild(); return; }
     if (t.classList.contains('del-rmat')) { var k3 = t.dataset.k; if (Object.keys(S.db).length <= 1) return; if (!confirm('\u00bfEliminar "' + k3 + '"?')) return; delete S.db[k3]; if (S.dbCat === k3) S.dbCat = Object.keys(S.db)[0]; sv(); rCfg(); reBuild(); return; }
