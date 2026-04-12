@@ -252,6 +252,7 @@ select option{background:var(--bg2)}
     <div class="nb" data-tab="cfg">Configuraci&#243;n</div>
     <div class="nb" data-tab="calchora">C&#225;lculo Hora</div>
     <div class="nb" data-tab="horas">Horas obra</div>
+    <div class="nb" data-tab="costohh">Costo HH</div>
   </div>
   <div class="body">
 
@@ -3334,6 +3335,367 @@ document.addEventListener('DOMContentLoaded', function() {
   el('oc-efil').addEventListener('change', renderOC);
 
 });
+
+// ═══════════════════════════════════════════════════════
+// COSTO HH — Cálculo de hora hombre (basado en Excel JL)
+// ═══════════════════════════════════════════════════════
+(function() {
+
+  // Estado local — categorías UOCRA y operarios de obra
+  var CHH = {
+    cats: [
+      { id: 'of-esp', nombre: 'Oficial especializado', basico: 8500 },
+      { id: 'oficial', nombre: 'Oficial', basico: 7274 },
+      { id: 'med-of', nombre: 'Medio oficial', basico: 6500 },
+      { id: 'ayud', nombre: 'Ayudante', basico: 5800 }
+    ],
+    obraOps: [],   // operarios en obra: { catId, cantidad }
+    obraCostos: [] // otros costos: { concepto, importe, iva }
+  };
+
+  // Guardar/cargar CHH en localStorage
+  function chhSv() {
+    try { localStorage.setItem('jl_chh', JSON.stringify(CHH)); } catch(e) {}
+  }
+  function chhLoad() {
+    try {
+      var d = JSON.parse(localStorage.getItem('jl_chh') || '{}');
+      if (d.cats && d.cats.length) CHH.cats = d.cats;
+      if (d.obraOps) CHH.obraOps = d.obraOps;
+      if (d.obraCostos) CHH.obraCostos = d.obraCostos;
+    } catch(e) {}
+  }
+  chhLoad();
+
+  var $f = window.$f || function(n){ return '$' + Math.round(n).toLocaleString('es-AR'); };
+  function pct(id) { return (parseFloat(document.getElementById(id).value) || 0) / 100; }
+  function val(id) { return parseFloat(document.getElementById(id).value) || 0; }
+
+  // ── CÁLCULO HORA HOMBRE ──────────────────────────────
+  function chhCalcHora(basico) {
+    var hmes   = val('chh-hmes') || 176;
+    var bMes   = basico * hmes;
+
+    // A: básico + presentismo
+    var present = bMes * pct('chh-present');
+    var subA    = bMes + present;
+
+    // B: adicionales salariales
+    var bVac = subA * pct('chh-vac');
+    var bSac = subA * pct('chh-sac');
+    var bFer = subA * pct('chh-fer');
+    var bEnf = subA * pct('chh-enf');
+    var bAcc = subA * pct('chh-acc');
+    var subB = bVac + bSac + bFer + bEnf + bAcc;
+
+    // C: cargas sociales
+    var base_c = subA + subB;
+    var cAp  = base_c * pct('chh-ap');
+    var cOs  = base_c * pct('chh-os');
+    var cSeg = base_c * pct('chh-seg');
+    var cArtF = val('chh-artf') / hmes;
+    var cArtV = base_c * pct('chh-artv');
+    var cSvid = val('chh-svid') / hmes;
+    var subC  = cAp + cOs + cSeg + cArtF + cArtV + cSvid;
+
+    // D: despido / IERIC (sobre subA+subB+subC)
+    var base_d = subA + subB + subC;
+    var dDesp  = base_d * pct('chh-desp');
+    var dIeric = base_d * pct('chh-ieric');
+    var subD   = dDesp + dIeric;
+
+    // E: gastos adm
+    var base_e = subA + subB + subC + subD;
+    var eAdm   = base_e * pct('chh-adm');
+    var subE   = eAdm;
+
+    // F-H: utilidad e impuestos
+    var base_f = base_e + subE;
+    var fUtil  = base_f * pct('chh-util');
+    var fGan   = base_f * pct('chh-gan');
+    var fMun   = base_f * pct('chh-mun');
+    var subFH  = fUtil + fGan + fMun;
+
+    // Hora SIN adicionales
+    var horaSin = (subA + subB + subC + subD + subE + subFH) / hmes;
+
+    // Adicionales mensuales → por hora
+    var eppH  = val('chh-epp')  / hmes;
+    var zonaH = val('chh-zona') / hmes;
+    var comH  = val('chh-com')  / hmes;
+    var preoH = val('chh-preo') / hmes;
+    var copaH = val('chh-copa') / hmes;
+    var adicH = eppH + zonaH + comH + preoH + copaH;
+
+    var horaNormal = horaSin + adicH;
+    var hora50     = horaNormal * 1.5;
+    var hora100    = horaNormal * 2;
+    var horaNoch   = horaNormal * 1.13;
+
+    return {
+      subA: subA/hmes, subB: subB/hmes, subC: subC/hmes,
+      subD: subD/hmes, subE: subE/hmes, subFH: subFH/hmes,
+      horaSin: horaSin, adicH: adicH,
+      horaNormal: horaNormal, hora50: hora50,
+      hora100: hora100, horaNoch: horaNoch,
+      hmes: hmes
+    };
+  }
+
+  function chhCalc() {
+    var basico = val('chh-basico');
+    var r = chhCalcHora(basico);
+
+    // Desglose
+    var d = document.getElementById('chh-desglose');
+    if (d) d.innerHTML = [
+      ['A · Básico + presentismo/h', r.subA],
+      ['B · Adic. salariales/h', r.subB],
+      ['C · Cargas sociales/h', r.subC],
+      ['D · Despido + IERIC/h', r.subD],
+      ['E · Gastos adm/h', r.subE],
+      ['F-H · Util. + impuestos/h', r.subFH],
+      ['<strong>Hora sin adicionales</strong>', r.horaSin],
+      ['Adicionales UOCRA/h', r.adicH],
+    ].map(function(row) {
+      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">'
+        + '<span>' + row[0] + '</span><span style="font-weight:600">' + $f(row[1]) + '</span></div>';
+    }).join('');
+
+    // Resultado
+    var res = document.getElementById('chh-resultado');
+    if (res) res.innerHTML =
+      '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="font-size:13px">Hora normal</span><span style="font-size:22px;font-weight:800;color:var(--red2)">' + $f(r.horaNormal) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora 50%</span><span style="font-weight:700">' + $f(r.hora50) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora 100%</span><span style="font-weight:700">' + $f(r.hora100) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora nocturna</span><span style="font-weight:700">' + $f(r.horaNoch) + '</span></div>' +
+      '<div style="border-top:1px solid var(--br2);margin-top:10px;padding-top:10px;display:flex;justify-content:space-between"><span style="font-size:13px">Jornal ' + r.hmes/176*9 + 'hs</span><span style="font-weight:700">' + $f(r.horaNormal * (r.hmes/176*9)) + '</span></div>';
+
+    // Actualizar tabla de categorías
+    chhRenderCats();
+    // Actualizar obra si está visible
+    chhObraCalc();
+  }
+  window.chhCalc = chhCalc;
+
+  // ── CATEGORÍAS ───────────────────────────────────────
+  function chhRenderCats() {
+    var tbl = document.getElementById('chh-cats-tbl');
+    if (!tbl) return;
+    tbl.innerHTML = CHH.cats.map(function(cat, i) {
+      var r = chhCalcHora(cat.basico);
+      var hmes = val('chh-hmes') || 176;
+      return '<tr>' +
+        '<td style="font-weight:600">' + cat.nombre + '</td>' +
+        '<td><input type="number" class="chh-cat-bas-inp" data-i="' + i + '" value="' + cat.basico + '" style="width:110px;text-align:right" min="0"></td>' +
+        '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(r.horaNormal) + '</td>' +
+        '<td style="text-align:right">' + $f(r.hora50) + '</td>' +
+        '<td style="text-align:right">' + $f(r.hora100) + '</td>' +
+        '<td style="text-align:right">' + $f(r.horaNoch) + '</td>' +
+        '<td style="text-align:right">' + $f(r.horaNormal * 9) + '</td>' +
+        '<td><button class="btn btns btnd chh-cat-del" data-i="' + i + '">✕</button></td>' +
+        '</tr>';
+    }).join('');
+    // Select en obra
+    var sel = document.getElementById('chh-op-cat-sel');
+    if (sel) {
+      var prev = sel.value;
+      sel.innerHTML = CHH.cats.map(function(c) {
+        return '<option value="' + c.id + '"' + (c.id === prev ? ' selected' : '') + '>' + c.nombre + '</option>';
+      }).join('');
+    }
+  }
+
+  // ── ESTRUCTURA DE OBRA ──────────────────────────────
+  function chhObraRenderOps() {
+    var tbl = document.getElementById('chh-op-tbl');
+    if (!tbl) return;
+    var dias  = val('chh-ob-dias') || 20;
+    var hn    = val('chh-ob-hn') || 9;
+    var h50   = val('chh-ob-h50') || 0;
+    var h100  = val('chh-ob-h100') || 0;
+
+    tbl.innerHTML = CHH.obraOps.map(function(op, i) {
+      var cat = CHH.cats.find(function(c) { return c.id === op.catId; }) || CHH.cats[0];
+      if (!cat) return '';
+      var r = chhCalcHora(cat.basico);
+      var costoDia = r.horaNormal * hn + r.hora50 * h50 + r.hora100 * h100;
+      var costoTotal = costoDia * dias * op.cantidad;
+      return '<tr>' +
+        '<td><select class="chh-op-cat" data-i="' + i + '" style="font-size:13px">' +
+          CHH.cats.map(function(c) { return '<option value="' + c.id + '"' + (c.id === op.catId ? ' selected' : '') + '>' + c.nombre + '</option>'; }).join('') +
+        '</select></td>' +
+        '<td><input type="number" class="chh-op-cant" data-i="' + i + '" value="' + op.cantidad + '" min="1" style="width:60px;text-align:right"></td>' +
+        '<td style="text-align:right">' + $f(r.horaNormal) + '</td>' +
+        '<td style="text-align:right">' + $f(costoDia) + '</td>' +
+        '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(costoTotal) + '</td>' +
+        '<td><button class="btn btns btnd chh-op-del" data-i="' + i + '">✕</button></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function chhObraRenderCostos() {
+    var tbl = document.getElementById('chh-costos-tbl');
+    if (!tbl) return;
+    tbl.innerHTML = CHH.obraCostos.map(function(c, i) {
+      var total = c.importe * (c.iva || 1);
+      return '<tr>' +
+        '<td><input type="text" class="chh-cost-nom" data-i="' + i + '" value="' + (c.concepto||'').replace(/"/g,'&quot;') + '" style="min-width:140px"></td>' +
+        '<td><input type="number" class="chh-cost-imp" data-i="' + i + '" value="' + c.importe + '" min="0" style="width:120px;text-align:right"></td>' +
+        '<td><input type="number" class="chh-cost-iva" data-i="' + i + '" value="' + (c.iva||1) + '" step="0.1" min="1" style="width:70px;text-align:right"></td>' +
+        '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(total) + '</td>' +
+        '<td><button class="btn btns btnd chh-cost-del" data-i="' + i + '">✕</button></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function chhObraCalc() {
+    var dias  = val('chh-ob-dias') || 20;
+    var hn    = val('chh-ob-hn') || 9;
+    var h50   = val('chh-ob-h50') || 0;
+    var h100  = val('chh-ob-h100') || 0;
+
+    // Costo MO
+    var totalMO = CHH.obraOps.reduce(function(acc, op) {
+      var cat = CHH.cats.find(function(c) { return c.id === op.catId; }) || CHH.cats[0];
+      if (!cat) return acc;
+      var r = chhCalcHora(cat.basico);
+      var costoDia = r.horaNormal * hn + r.hora50 * h50 + r.hora100 * h100;
+      return acc + costoDia * dias * op.cantidad;
+    }, 0);
+
+    var elMO = document.getElementById('chh-ob-mo');
+    if (elMO) elMO.textContent = $f(totalMO);
+
+    // Otros costos
+    var totalOtros = CHH.obraCostos.reduce(function(a, c) { return a + c.importe * (c.iva || 1); }, 0);
+    var elOtros = document.getElementById('chh-ob-otros');
+    if (elOtros) elOtros.textContent = $f(totalOtros);
+
+    // Estructura
+    var subtotal = totalMO + totalOtros;
+    var adm   = subtotal * pct('chh-ob-adm');
+    var imp   = subtotal * pct('chh-ob-imp');
+    var rent  = (subtotal + adm + imp) * pct('chh-ob-rent');
+    var sub2  = subtotal + adm + imp + rent;
+    var tax   = sub2 * pct('chh-ob-tax');
+    var total = sub2 + tax;
+
+    var desg = document.getElementById('chh-ob-desglose');
+    if (desg) desg.innerHTML = [
+      ['MO total', totalMO],
+      ['Otros costos', totalOtros],
+      ['Subtotal directo', subtotal],
+      ['Administrativo', adm],
+      ['Imprevistos', imp],
+      ['Renta bruta', rent],
+      ['Subtotal 2', sub2],
+      ['Impuestos', tax],
+    ].map(function(row) {
+      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">' +
+        '<span>' + row[0] + '</span><span style="font-weight:600">' + $f(row[1]) + '</span></div>';
+    }).join('');
+
+    var hsTotales = dias * (hn + h50 + h100) * Math.max(CHH.obraOps.reduce(function(a,o){ return a+o.cantidad; }, 0), 1);
+
+    var res = document.getElementById('chh-ob-resultado');
+    if (res) res.innerHTML =
+      '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="font-size:13px">Valor total obra</span><span style="font-size:22px;font-weight:800;color:var(--red2)">' + $f(total) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Horas totales MO</span><span style="font-weight:700">' + hsTotales + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Valor hora final</span><span style="font-weight:700">' + (hsTotales > 0 ? $f(total / hsTotales) : '—') + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between"><span style="font-size:13px">% MO sobre total</span><span style="font-weight:700">' + (total > 0 ? (totalMO/total*100).toFixed(1) : '0') + '%</span></div>';
+  }
+  window.chhObraCalc = chhObraCalc;
+
+  // ── INIT ──────────────────────────────────────────────
+  function chhInit() {
+    chhCalc();
+    chhRenderCats();
+    chhObraRenderOps();
+    chhObraRenderCostos();
+    chhObraCalc();
+
+    // Btn agregar categoría
+    var btnCat = document.getElementById('btn-chh-add-cat');
+    if (btnCat) btnCat.addEventListener('click', function() {
+      var n = (document.getElementById('chh-cat-nom') || {}).value;
+      var b = parseFloat((document.getElementById('chh-cat-bas') || {}).value) || 0;
+      if (!n || !n.trim()) return;
+      CHH.cats.push({ id: 'cat-' + Date.now(), nombre: n.trim(), basico: b });
+      document.getElementById('chh-cat-nom').value = '';
+      chhSv(); chhRenderCats();
+    });
+
+    // Btn agregar operario
+    var btnOp = document.getElementById('btn-chh-add-op');
+    if (btnOp) btnOp.addEventListener('click', function() {
+      var catId = CHH.cats.length ? CHH.cats[0].id : '';
+      CHH.obraOps.push({ catId: catId, cantidad: 1 });
+      chhSv(); chhObraRenderOps(); chhObraCalc();
+    });
+
+    // Btn agregar costo
+    var btnCosto = document.getElementById('btn-chh-add-costo');
+    if (btnCosto) btnCosto.addEventListener('click', function() {
+      CHH.obraCostos.push({ concepto: '', importe: 0, iva: 1 });
+      chhSv(); chhObraRenderCostos(); chhObraCalc();
+    });
+
+    // Delegación de eventos en la pestaña costohh
+    var page = document.getElementById('costohh');
+    if (!page) return;
+
+    page.addEventListener('change', function(e) {
+      var t = e.target;
+      if (t.classList.contains('chh-op-cat')) {
+        CHH.obraOps[+t.dataset.i].catId = t.value;
+        chhSv(); chhObraRenderOps(); chhObraCalc();
+      } else if (t.classList.contains('chh-op-cant')) {
+        CHH.obraOps[+t.dataset.i].cantidad = parseInt(t.value) || 1;
+        chhSv(); chhObraRenderOps(); chhObraCalc();
+      } else if (t.classList.contains('chh-cost-imp')) {
+        CHH.obraCostos[+t.dataset.i].importe = parseFloat(t.value) || 0;
+        chhSv(); chhObraRenderCostos(); chhObraCalc();
+      } else if (t.classList.contains('chh-cost-iva')) {
+        CHH.obraCostos[+t.dataset.i].iva = parseFloat(t.value) || 1;
+        chhSv(); chhObraRenderCostos(); chhObraCalc();
+      } else if (t.classList.contains('chh-cat-bas-inp')) {
+        CHH.cats[+t.dataset.i].basico = parseFloat(t.value) || 0;
+        chhSv(); chhCalc();
+      }
+    });
+
+    page.addEventListener('input', function(e) {
+      var t = e.target;
+      if (t.classList.contains('chh-cost-nom')) {
+        CHH.obraCostos[+t.dataset.i].concepto = t.value;
+        chhSv();
+      }
+    });
+
+    page.addEventListener('click', function(e) {
+      var t = e.target;
+      if (t.classList.contains('chh-cat-del')) {
+        CHH.cats.splice(+t.dataset.i, 1);
+        chhSv(); chhCalc();
+      } else if (t.classList.contains('chh-op-del')) {
+        CHH.obraOps.splice(+t.dataset.i, 1);
+        chhSv(); chhObraRenderOps(); chhObraCalc();
+      } else if (t.classList.contains('chh-cost-del')) {
+        CHH.obraCostos.splice(+t.dataset.i, 1);
+        chhSv(); chhObraRenderCostos(); chhObraCalc();
+      }
+    });
+  }
+
+  // Correr cuando el DOM esté listo
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', chhInit);
+  } else {
+    chhInit();
+  }
+
+})();
 </script>
 
 <div class="mo" id="mo-gp-preview" style="align-items:flex-start;padding:16px;overflow-y:auto">
@@ -3478,6 +3840,211 @@ document.addEventListener('DOMContentLoaded', function() {
     <div id="horas-tabla"><div class="empty">Sin registros</div></div>
   </div>
 </div>
+
+<div id="costohh" class="page">
+  <div class="stabs">
+    <div class="st on" data-sub="chh-calc">Cálculo de hora</div>
+    <div class="st" data-sub="chh-cats">Categorías UOCRA</div>
+    <div class="st" data-sub="chh-obra">Estructura de obra</div>
+  </div>
+
+  <!-- SUB: CALCULO DE HORA -->
+  <div id="chh-calc" class="sp on">
+    <div class="two" style="align-items:start">
+
+      <!-- COLUMNA IZQ: Inputs -->
+      <div>
+        <!-- BLOQUE A: BÁSICO -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">A · Sueldo básico</div>
+          <div class="fr" style="margin-top:8px">
+            <div class="fg"><label>Básico hora (ARS)</label><input type="number" id="chh-basico" value="7274" min="0" oninput="chhCalc()"></div>
+            <div class="fg"><label>Presentismo (%)</label><input type="number" id="chh-present" value="20" min="0" step="0.1" oninput="chhCalc()"></div>
+            <div class="fg"><label>Horas/mes</label><input type="number" id="chh-hmes" value="176" min="1" oninput="chhCalc()"></div>
+          </div>
+        </div>
+
+        <!-- BLOQUE B: ADICIONALES SALARIALES -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">B · Adicionales salariales (%)</div>
+          <div class="fr" style="margin-top:8px">
+            <div class="fg"><label>Vacaciones</label><input type="number" id="chh-vac" value="5.3" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>SAC</label><input type="number" id="chh-sac" value="8.33" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Feriados</label><input type="number" id="chh-fer" value="5.67" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Enfermedad</label><input type="number" id="chh-enf" value="2.53" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Accidente</label><input type="number" id="chh-acc" value="1.89" step="0.01" oninput="chhCalc()">%</div>
+          </div>
+        </div>
+
+        <!-- BLOQUE C: CARGAS SOCIALES -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">C · Cargas sociales (%)</div>
+          <div class="fr" style="margin-top:8px">
+            <div class="fg"><label>Aportes previsionales</label><input type="number" id="chh-ap" value="20" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Obra social</label><input type="number" id="chh-os" value="6" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Seg. colectivo/SEP</label><input type="number" id="chh-seg" value="1.21" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>ART fijo (mensual)</label><input type="number" id="chh-artf" value="0" min="0" oninput="chhCalc()"></div>
+            <div class="fg"><label>ART variable</label><input type="number" id="chh-artv" value="6" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Seg. vida obligatorio</label><input type="number" id="chh-svid" value="0" min="0" oninput="chhCalc()"></div>
+          </div>
+        </div>
+
+        <!-- BLOQUE D: DESPIDO / IERIC -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">D · Indemnización / IERIC (%)</div>
+          <div class="fr" style="margin-top:8px">
+            <div class="fg"><label>Costo despido</label><input type="number" id="chh-desp" value="12" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>IERIC</label><input type="number" id="chh-ieric" value="4" step="0.01" oninput="chhCalc()">%</div>
+          </div>
+        </div>
+
+        <!-- BLOQUE E-H: GASTOS / IMPUESTOS -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">E-H · Gastos e impuestos (%)</div>
+          <div class="fr" style="margin-top:8px">
+            <div class="fg"><label>Gastos administrativos</label><input type="number" id="chh-adm" value="0" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Utilidad bruta</label><input type="number" id="chh-util" value="2" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Ganancias</label><input type="number" id="chh-gan" value="1" step="0.01" oninput="chhCalc()">%</div>
+            <div class="fg"><label>Municipales / Ing. brutos</label><input type="number" id="chh-mun" value="1" step="0.01" oninput="chhCalc()">%</div>
+          </div>
+        </div>
+
+        <!-- BLOQUE ADICIONALES UOCRA (mensuales) -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">Adicionales UOCRA (mensuales ARS)</div>
+          <div class="fr" style="margin-top:8px">
+            <div class="fg"><label>Indumentaria / EPP</label><input type="number" id="chh-epp" value="100000" min="0" oninput="chhCalc()"></div>
+            <div class="fg"><label>Adicional zona A</label><input type="number" id="chh-zona" value="50000" min="0" oninput="chhCalc()"></div>
+            <div class="fg"><label>Comidas UOCRA</label><input type="number" id="chh-com" value="178500" min="0" oninput="chhCalc()"></div>
+            <div class="fg"><label>Preocupacionales</label><input type="number" id="chh-preo" value="100000" min="0" oninput="chhCalc()"></div>
+            <div class="fg"><label>Adicional COPA</label><input type="number" id="chh-copa" value="100000" min="0" oninput="chhCalc()"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COLUMNA DER: Resultados -->
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">Desglose de costo / hora</div>
+          <div id="chh-desglose" style="font-size:13px"></div>
+        </div>
+        <div class="card" style="background:var(--redd);border:2px solid var(--red2)">
+          <div class="sttl" style="color:var(--red2)">Valor de hora</div>
+          <div id="chh-resultado" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUB: CATEGORÍAS UOCRA -->
+  <div id="chh-cats" class="sp">
+    <div class="card">
+      <div class="sttl" style="margin-bottom:12px">Categorías UOCRA — valor hora por categoría</div>
+      <p style="font-size:12px;color:var(--txm);margin-bottom:14px">Los factores se aplican sobre el básico calculado. Podés editar el factor o el básico de cada categoría.</p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Categoría</th>
+            <th style="text-align:right">Básico/hora</th>
+            <th style="text-align:right">Hora normal</th>
+            <th style="text-align:right">Hora 50%</th>
+            <th style="text-align:right">Hora 100%</th>
+            <th style="text-align:right">Nocturna +13%</th>
+            <th style="text-align:right">Jornal 9hs</th>
+          </tr></thead>
+          <tbody id="chh-cats-tbl"></tbody>
+        </table>
+      </div>
+      <div class="dvd" style="margin-top:14px"></div>
+      <div class="sttl">Agregar categoría</div>
+      <div class="fr" style="margin-top:8px">
+        <div class="fg" style="flex:2"><label>Nombre</label><input type="text" id="chh-cat-nom" placeholder="Ej: Ayudante"></div>
+        <div class="fg"><label>Básico/hora (ARS)</label><input type="number" id="chh-cat-bas" value="6000" min="0"></div>
+        <button class="btn btnp" id="btn-chh-add-cat" style="align-self:flex-end">+ Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUB: ESTRUCTURA DE OBRA -->
+  <div id="chh-obra" class="sp">
+    <div class="card" style="margin-bottom:14px">
+      <div class="sttl">Datos de la obra</div>
+      <div class="fr" style="margin-top:8px">
+        <div class="fg" style="flex:2"><label>Nombre / OC</label><input type="text" id="chh-ob-nom" placeholder="Nombre de la obra u OC"></div>
+        <div class="fg"><label>Días de trabajo</label><input type="number" id="chh-ob-dias" value="20" min="1" oninput="chhObraCalc()"></div>
+        <div class="fg"><label>Hs normales/día</label><input type="number" id="chh-ob-hn" value="9" min="1" oninput="chhObraCalc()"></div>
+        <div class="fg"><label>Hs extras 50%/día</label><input type="number" id="chh-ob-h50" value="0" min="0" oninput="chhObraCalc()"></div>
+        <div class="fg"><label>Hs extras 100%/día</label><input type="number" id="chh-ob-h100" value="0" min="0" oninput="chhObraCalc()"></div>
+      </div>
+    </div>
+
+    <!-- Tabla de operarios en obra -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="sttl" style="margin-bottom:0">Operarios</div>
+        <button class="btn btns btnp" id="btn-chh-add-op">+ Agregar operario</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Categoría</th>
+            <th style="text-align:right">Cantidad</th>
+            <th style="text-align:right">Costo/hora</th>
+            <th style="text-align:right">Costo día</th>
+            <th style="text-align:right">Costo total</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="chh-op-tbl"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px;font-size:14px;font-weight:700">
+        Costo MO total: <span id="chh-ob-mo" style="color:var(--red2);margin-left:8px">$ 0</span>
+      </div>
+    </div>
+
+    <!-- Otros costos de obra -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="sttl" style="margin-bottom:0">Otros costos</div>
+        <button class="btn btns btnp" id="btn-chh-add-costo">+ Agregar</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Concepto</th>
+            <th style="text-align:right">Importe</th>
+            <th>Factor IVA</th>
+            <th style="text-align:right">Total</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="chh-costos-tbl"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px;font-size:14px;font-weight:700">
+        Otros costos: <span id="chh-ob-otros" style="color:var(--red2);margin-left:8px">$ 0</span>
+      </div>
+    </div>
+
+    <!-- Resumen final -->
+    <div class="two" style="align-items:start">
+      <div class="card">
+        <div class="sttl">Estructura de costos</div>
+        <div class="fr" style="margin-top:8px">
+          <div class="fg"><label>Administrativo (%)</label><input type="number" id="chh-ob-adm" value="2" step="0.1" oninput="chhObraCalc()">%</div>
+          <div class="fg"><label>Imprevistos (%)</label><input type="number" id="chh-ob-imp" value="4" step="0.1" oninput="chhObraCalc()">%</div>
+          <div class="fg"><label>Renta bruta (%)</label><input type="number" id="chh-ob-rent" value="20" step="0.1" oninput="chhObraCalc()">%</div>
+          <div class="fg"><label>Impuestos (%)</label><input type="number" id="chh-ob-tax" value="9" step="0.1" oninput="chhObraCalc()">%</div>
+        </div>
+        <div id="chh-ob-desglose" style="margin-top:12px;font-size:13px"></div>
+      </div>
+      <div class="card" style="background:var(--redd);border:2px solid var(--red2)">
+        <div class="sttl" style="color:var(--red2)">Resultado de obra</div>
+        <div id="chh-ob-resultado" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 </body>
 </html>
