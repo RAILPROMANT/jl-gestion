@@ -370,7 +370,7 @@ select option{background:var(--bg2)}
           <div class="sttl">Agregar &#237;tem</div>
           <div class="fr">
             <div class="fg"><label>Categoría</label><select id="s-cat" onchange="stkCatChange()"></select></div>
-            <div class="fg" style="flex:2;min-width:140px"><label>Ítem</label><select id="s-nom-sel"></select></div>
+            <div class="fg" style="flex:2;min-width:140px"><label>Ítem (del catálogo)</label><select id="s-nom-sel"></select></div><div class="fg" style="flex:2;min-width:140px"><label>O ingresá nombre libre</label><input type="text" id="s-nom-free" placeholder="Nombre del ítem..."></div>
             <div class="fg"><label>Cantidad</label><input type="number" id="s-qty" value="0" min="0"></div>
             <div class="fg"><label>Unidad</label><input type="text" id="s-un" value="u" style="width:54px"></div>
             <div class="fg"><label>Costo un.</label><input type="number" id="s-cu" value="0" min="0"></div>
@@ -383,7 +383,7 @@ select option{background:var(--bg2)}
         <div class="card" style="margin-bottom:14px">
           <div class="sttl">Registrar compra</div>
           <div class="fr" style="margin-top:0;margin-bottom:12px">
-            <div class="fg" style="flex:2"><label>Proveedor</label><select id="c-prv-sel" onchange="compProvChange()"><option value="">— Seleccionar proveedor —</option></select></div>
+            <div class="fg" style="flex:2"><label>Proveedor (de la lista)</label><select id="c-prv-sel" onchange="compProvChange()"><option value="">— Seleccionar proveedor —</option></select></div><div class="fg" style="flex:2"><label>O ingresá proveedor libre</label><input type="text" id="c-prv-free" placeholder="Nombre del proveedor..."></div>
             <div class="fg"><label>Fecha</label><input type="date" id="c-fec"></div>
           </div>
           <div id="comp-items"></div>
@@ -2593,9 +2593,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (t.id === 'btn-add-it-obra') { addItObra(); return; }
     if (t.id === 'btn-print-pdf') { printPDF(); return; }
     if (t.id === 'btn-del-obra') { delObra(); return; }
-    if (t.id === 'btn-add-stk') { var n = el('s-nom').value.trim(); if (!n) return; S.stock.push({ id: uid(), nombre: n, cat: el('s-cat').value, qty: +el('s-qty').value, un: el('s-un').value || 'u', cu: +el('s-cu').value, qmin: +el('s-min').value }); el('s-nom').value = ''; sv(); rMat(); rDash(); return; }
+    if (t.id === 'btn-add-stk') { var nomSel = el('s-nom-sel'); var nomFree = el('s-nom-free'); var n = (nomFree && nomFree.value.trim()) ? nomFree.value.trim() : (nomSel ? nomSel.value : ''); if (!n) return; S.stock.push({ id: uid(), nombre: n, cat: el('s-cat').value, qty: +el('s-qty').value, un: el('s-un').value || 'u', cu: +el('s-cu').value, qmin: +el('s-min').value }); if (nomFree) nomFree.value = ''; if (nomSel) nomSel.value = ''; sv(); rMat(); rDash(); return; }
     if (t.id === 'btn-add-ci') { S.CI.push({ n: '', qty: 1, cu: 0 }); rCI(); return; }
-    if (t.id === 'btn-save-compra') { var pr = el('c-prv').value.trim(); if (!pr) return; S.compras = [{ id: uid(), proveedor: pr, fecha: el('c-fec').value, items: S.CI.filter(function(x) { return x.n.trim(); }) }].concat(S.compras); S.CI = [{ n: '', qty: 1, cu: 0 }]; el('c-prv').value = ''; sv(); rMat(); return; }
+    if (t.id === 'btn-save-compra') { var pr = (el('c-prv-sel') ? el('c-prv-sel').value : '') || (el('c-prv-free') ? el('c-prv-free').value.trim() : ''); if (!pr) { alert('Seleccioná o ingresá un proveedor.'); return; } var itsFilt = S.CI.filter(function(x) { return x.n && x.n.trim(); }); if (!itsFilt.length) { alert('Agregá al menos un ítem a la compra.'); return; } S.compras = [{ id: uid(), proveedor: pr, fecha: el('c-fec').value, items: itsFilt }].concat(S.compras); S.CI = [{ n: '', qty: 1, cu: 0 }]; if (el('c-prv-sel')) el('c-prv-sel').value = ''; if (el('c-prv-free')) el('c-prv-free').value = ''; sv(); rMat(); return; }
     if (t.id === 'btn-rpt-stock') { rptStock(); return; }
     if (t.id === 'btn-add-ref') {
       if (!S._editRefs) S._editRefs = [];
