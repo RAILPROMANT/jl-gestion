@@ -1168,296 +1168,204 @@ function iniciarApp() {
 // ═══════════════════════════════════════
 // HORA FINAL POR CATEGORIA UOCRA
 // ═══════════════════════════════════════
-function chGetAdicionales() {
-  var hb    = parseFloat((el('ch-hb')||{}).value) || 5470;
-  var cs    = (parseFloat((el('ch-cs')||{}).value) || 45) / 100;
-  var dias  = parseFloat((el('ch-dias')||{}).value) || 22;
-  var hd    = parseFloat((el('ch-hd')||{}).value) || 9;
-  var dsem  = parseFloat((el('ch-dsem')||{}).value) || 180;
-  var rm    = parseFloat((el('ch-rm')||{}).value) || 270000;
-  var pres  = parseFloat((el('ch-pres')||{}).value) || 0.2;
-  var fd    = parseFloat((el('ch-fd')||{}).value) || 0.12;
-  var pd    = parseFloat((el('ch-pd')||{}).value) || 0.5;
-  var agui  = parseFloat((el('ch-agui')||{}).value) || 60;
-  var epp   = parseFloat((el('ch-epp')||{}).value) || 80.22;
-  var vianda= parseFloat((el('ch-vianda')||{}).value) || 88.8;
-  var agua  = parseFloat((el('ch-agua')||{}).value) || 185;
-  var revMed   = (rm / dsem) / hd;
-  var presAdc  = hb * pres;
-  var fondoDes = hb * fd;
-  var provDesp = (hb * hd * dias * pd) / (176 * 6);
-  var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
-  return { cs: cs, dias: dias, hd: hd, dsem: dsem, rm: rm, pres: pres, fd: fd, pd: pd,
-           agui: agui, epp: epp, vianda: vianda, agua: agua, totalAdc: totalAdc, revMed: revMed };
-}
 
-function chHoraFinal(basico) {
-  var p = chGetAdicionales();
-  var dias = p.dias, hd = p.hd, dsem = p.dsem;
-  var rm = p.rm, pres = p.pres, agui = p.agui, epp = p.epp, vianda = p.vianda, agua = p.agua;
-  return chHoraFinalUOCRA(basico, dias, hd, dsem, rm, pres, agui, epp, vianda, agua);
-}
-
-function chCalcularCostoUOCRA() {
-  var d = el('ch-uocra-costo'); if (!d) return;
-  var hb = parseFloat((el('ch-hb')||{}).value) || 5470;
-  var cs = (parseFloat((el('ch-cs')||{}).value)||45)/100;
-  var pres = parseFloat((el('ch-pres')||{}).value)||0.2;
-  var fd   = parseFloat((el('ch-fd')||{}).value)||0.12;
-  var pd   = parseFloat((el('ch-pd')||{}).value)||0.5;
-  var dias = parseFloat((el('ch-dias')||{}).value)||22;
-  var hd   = parseFloat((el('ch-hd')||{}).value)||9;
-  var dsem = parseFloat((el('ch-dsem')||{}).value)||180;
-  var rm   = parseFloat((el('ch-rm')||{}).value)||270000;
-  var agui = parseFloat((el('ch-agui')||{}).value)||60;
-  var epp  = parseFloat((el('ch-epp')||{}).value)||80.22;
-  var vianda=parseFloat((el('ch-vianda')||{}).value)||88.8;
-  var agua = parseFloat((el('ch-agua')||{}).value)||185;
-
-  // Por cada categoría, el básico es diferente
-  var diasMens = dias || 22;
-  var rows = UOCRA.map(function(r) {
-    var basico = r.basico;
-    var copaMult = 1 + (r.copaPct||70)/100;
-    var viaMult  = 1 + (r.viaPct||80)/100;
-    var basicoCopa = basico * copaMult;
-    var basicoVia  = basico * viaMult;
-
-    // Presentismo: 20% del básico
-    var presBasico = basico * pres;
-    var basicoConPres = basico + presBasico;
-
-    // Sub-totales según Excel: A=básico+presentismo, luego cargas sobre A
-    // B= vacaciones(5.3%) + SAC(8.33%) + feriados(5.67%) + enfermedad(2.53%) + accidente(1.89%) sobre basicoConPres
-    var B_vac  = basicoConPres * 0.053;
-    var B_sac  = basicoConPres * 0.0833;
-    var B_fer  = basicoConPres * 0.0567;
-    var B_enf  = basicoConPres * 0.0253;
-    var B_acc  = basicoConPres * 0.0189;
-    var subB   = B_vac + B_sac + B_fer + B_enf + B_acc;
-
-    // C= aportes pats(20%) + obra social(6%) + seguro col(1.21%) + ART var(6%) sobre basicoConPres
-    var C_ap   = basicoConPres * 0.20;
-    var C_os   = basicoConPres * 0.06;
-    var C_sv   = basicoConPres * 0.0121;
-    var C_art  = basicoConPres * 0.06;
-    var subC   = C_ap + C_os + C_sv + C_art;
-
-    // D= costo despido(12%) + IERIC(4%) sobre (basicoConPres + subB + subC)
-    var baseD  = basicoConPres + subB + subC;
-    var D_des  = baseD * 0.12;
-    var D_ier  = baseD * 0.04;
-    var subD   = D_des + D_ier;
-
-    var mensual = basicoConPres + subB + subC + subD;
-    var hmens   = diasMens * hd;
-    if (hmens <= 0) hmens = 189;
-    var costoHora = mensual / hmens;
-
-    // Adicionales
-    var revMed   = (rm / dsem) / hd;
-    var horaFinal = costoHora + revMed + agui + epp + vianda + agua;
-
-    // Con COPA y Vía (básico UOCRA aumentado, mismas cargas aplicadas)
-    var horaFinalCopa = chHoraFinalUOCRA(basicoCopa, diasMens, hd, dsem, rm, pres, agui, epp, vianda, agua);
-    var horaFinalVia  = chHoraFinalUOCRA(basicoVia,  diasMens, hd, dsem, rm, pres, agui, epp, vianda, agua);
-
-    return '<tr>'
-      + '<td style="font-weight:700">' + r.cat + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(basico)) + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(costoHora)) + '</td>'
-      + '<td style="text-align:right;font-weight:600;color:var(--blu)">' + $f(Math.round(horaFinalCopa)) + '</td>'
-      + '<td style="text-align:right;font-weight:600;color:var(--grn)">' + $f(Math.round(horaFinalVia)) + '</td>'
-      + '</tr>';
-  }).join('');
-
-
-  var tblHead = '<div style="overflow-x:auto"><table>'
-    + '<thead><tr>'
-    + '<th>Categor&#237;a</th>'
-    + '<th style="text-align:right">B&#225;sico</th>'
-    + '<th style="text-align:right">Costo/hora</th>'
-    + '<th style="text-align:right">Hora COPA (+' + (UOCRA[0]||{copaPct:70}).copaPct + '%)</th>'
-    + '<th style="text-align:right">Hora V&#237;a (+' + (UOCRA[0]||{viaPct:80}).viaPct + '%)</th>'
-    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-  chCalcularGanancia();
-}
-
-function chHoraFinalUOCRA(basico, diasMens, hd, dsem, rm, pres, agui, epp, vianda, agua) {
-  var presBasico = basico * pres;
-  var basicoConPres = basico + presBasico;
-  var subB = basicoConPres * (0.053 + 0.0833 + 0.0567 + 0.0253 + 0.0189);
-  var subC = basicoConPres * (0.20 + 0.06 + 0.0121 + 0.06);
-  var baseD = basicoConPres + subB + subC;
-  var subD = baseD * (0.12 + 0.04);
-  var mensual = basicoConPres + subB + subC + subD;
-  var hmens = (diasMens||22) * (hd||9);
-  var costoHora = mensual / hmens;
-  var revMed = (rm / (dsem||180)) / (hd||9);
-  return costoHora + revMed + agui + epp + vianda + agua;
-}
-
-function chCalcularGanancia() {
-  var d = el('ch-ganancia-resultado'); if (!d) return;
-  var pct = (parseFloat((el('ch-gan-pct')||{}).value) || 30) / 100;
-  var extraPct = (parseFloat((el('ch-extra-pct')||{}).value) || 0) / 100;
-  var hb = parseFloat((el('ch-hb')||{}).value) || 5470;
-  var dias = parseFloat((el('ch-dias')||{}).value)||22;
-  var hd   = parseFloat((el('ch-hd')||{}).value)||9;
-  var dsem = parseFloat((el('ch-dsem')||{}).value)||180;
-  var rm   = parseFloat((el('ch-rm')||{}).value)||270000;
-  var pres = parseFloat((el('ch-pres')||{}).value)||0.2;
-  var agui = parseFloat((el('ch-agui')||{}).value)||60;
-  var epp  = parseFloat((el('ch-epp')||{}).value)||80.22;
-  var vianda=parseFloat((el('ch-vianda')||{}).value)||88.8;
-  var agua = parseFloat((el('ch-agua')||{}).value)||185;
-
-  var extraLabel = extraPct > 0 ? '+' + Math.round(extraPct*100) + '% extra' : 'Hora completa';
-
-  var rows = UOCRA.map(function(r) {
-    var basico = r.basico;
-    var copaMult = 1 + (r.copaPct||70)/100;
-    var viaMult  = 1 + (r.viaPct||80)/100;
-    var basicoCopa = basico * copaMult;
-    var basicoVia  = basico * viaMult;
-
-    var horaCopa  = chHoraFinalUOCRA(basicoCopa, dias, hd, dsem, rm, pres, agui, epp, vianda, agua);
-    var horaVia   = chHoraFinalUOCRA(basicoVia,  dias, hd, dsem, rm, pres, agui, epp, vianda, agua);
-
-    // Si hay extra%, aplicar sobre la hora completa
-    var horaCopaExtra = horaCopa * (1 + extraPct);
-    var horaViaExtra  = horaVia  * (1 + extraPct);
-
-    // Precio venta = hora (con extra si aplica) * (1 + ganancia)
-    var precioCopa = horaCopaExtra * (1 + pct);
-    var precioVia  = horaViaExtra  * (1 + pct);
-    var ganCopa    = horaCopaExtra * pct;
-    var ganVia     = horaViaExtra  * pct;
-
-    return '<tr>'
-      + '<td style="font-weight:700">' + r.cat + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(horaCopa)) + '</td>'
-      + (extraPct > 0 ? '<td style="text-align:right;color:#f59e0b;font-weight:600">' + $f(Math.round(horaCopaExtra)) + '</td>' : '')
-      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganCopa)) + '</td>'
-      + '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(Math.round(precioCopa)) + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(horaVia)) + '</td>'
-      + (extraPct > 0 ? '<td style="text-align:right;color:#f59e0b;font-weight:600">' + $f(Math.round(horaViaExtra)) + '</td>' : '')
-      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganVia)) + '</td>'
-      + '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(Math.round(precioVia)) + '</td>'
-      + '</tr>';
-  }).join('');
-
-  var extraCols = extraPct > 0 ? '<th style="text-align:right">' + extraLabel + '</th>' : '';
-  var copaPct = (UOCRA[0]||{copaPct:70}).copaPct;
-  var viaPct  = (UOCRA[0]||{viaPct:80}).viaPct;
-
-  d.innerHTML = '<div style="overflow-x:auto"><table>'
-    + '<thead>'
-    + '<tr><th>Categor&#237;a</th>'
-    + '<th colspan="' + (extraPct>0?4:3) + '" style="text-align:center;background:rgba(96,165,250,.08);color:var(--blu)">Hora COPA (+' + copaPct + '%)</th>'
-    + '<th colspan="' + (extraPct>0?4:3) + '" style="text-align:center;background:rgba(34,197,94,.06);color:var(--grn)">Hora V&#237;a (+' + viaPct + '%)</th>'
-    + '</tr>'
-    + '<tr><th></th>'
-    + '<th style="text-align:right">Costo/hora</th>' + extraCols + '<th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
-    + '<th style="text-align:right">Costo/hora</th>' + extraCols + '<th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
-    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-}
-
-// ═══════════════════════════════════════
-// UOCRA
-// ═══════════════════════════════════════
+// ── Datos UOCRA editables ──────────────
 var UOCRA = [
-  { cat: 'Of. Especializado', basico: 5470,   copaPct: 70, viaPct: 80 },
-  { cat: 'Oficial',           basico: 4679,   copaPct: 70, viaPct: 80 },
-  { cat: 'Medio Oficial',     basico: 4324,   copaPct: 70, viaPct: 80 },
-  { cat: 'Ayudante',          basico: 3980,   copaPct: 70, viaPct: 80 }
+  { cat: 'Of. Especializado', basico: 7274 },
+  { cat: 'Oficial',           basico: 6282 },
+  { cat: 'Medio Oficial',     basico: 5803 },
+  { cat: 'Ayudante',          basico: 5324 }
 ];
+
+// ── Leer inputs de la página ───────────
+function chParams() {
+  function n(id, def) { return parseFloat((el(id)||{}).value) || def; }
+  return {
+    basico : n('ch-hb',    7274),   // básico referencia (para el cálculo propio)
+    hMens  : n('ch-horas-mens', 176),  // horas mensuales (176 conv. normal, 189 agro)
+    dsem   : n('ch-dsem',  180),    // días por semestre (rev. médica)
+    hd     : n('ch-hd',    9),      // horas diarias
+    rm     : n('ch-rm',    300000), // revisión médica mensual $
+    epp    : n('ch-epp',   568.18), // EPP y ropa ($/h)
+    uocraZona : n('ch-zona', 284.09),  // adicional UOCRA zona A ($/h)
+    comidas   : n('ch-comidas', 1014.20), // comidas UOCRA ($/h)
+    preocup   : n('ch-preocup', 568.18), // preocupacionales ($/h)
+    ganPct : n('ch-gan-pct', 0),    // % ganancia (puede ser 0)
+    extraPct: n('ch-extra-pct', 0) // % extra sobre hora (ej: 40)
+  };
+}
+
+// ── Cálculo de costo/hora para un básico dado ──
+// Sigue la estructura exacta del Excel (convenio agroexportador)
+// A.1 Básico, A.2 Presentismo 20%
+// B = vacaciones 5.3% + SAC 8.33% + feriados 5.67% + enfermedad 2.53% + accidente 1.89%  sobre A
+// C = aportes prev 20% + obra social 6% + seg.col 1.21% + ART var 6%  sobre A
+// D = despido 12% + IERIC 4%  sobre (A+B+C)
+// E = gastos adm (configurable, por defecto 0)
+// F = utilidad bruta (configurable)
+// G = ganancias (configurable)
+// H = impuestos (configurable)
+// Adicionales: revisión médica, EPP, zona, comidas, preocupacionales
+function chCostoHora(basico, p) {
+  var A1 = basico;
+  var A2 = A1 * 0.20;          // presentismo
+  var A  = A1 + A2;
+  var B  = A * (0.053 + 0.0833 + 0.0567 + 0.0253 + 0.0189);  // 0.2372
+  var C  = A * (0.20 + 0.06 + 0.0121 + 0.06);                 // 0.3321
+  var D  = (A + B + C) * (0.12 + 0.04);                       // 0.16
+  var mensual = A + B + C + D;
+  var hMens = p.hMens || 176;
+  var costo  = mensual / hMens;
+  // Adicionales
+  var revMed = p.rm / hMens;   // revisión médica prorrateada
+  return costo + revMed + p.epp + p.uocraZona + p.comidas + p.preocup;
+}
 
 function uocraRenderTabla() {
   var tbody = el('uocra-body'); if (!tbody) return;
   tbody.innerHTML = UOCRA.map(function(r, i) {
     return '<tr>'
       + '<td style="font-weight:600">' + r.cat + '</td>'
-      + '<td style="text-align:right"><input type="number" class="uocra-basico" data-i="' + i + '" value="' + r.basico + '" style="width:110px;text-align:right" oninput="UOCRA[' + i + '].basico=parseFloat(this.value)||0;chCalcularCostoUOCRA();chCalcularUOCRA();"></td>'
-      + '<td style="text-align:right"><input type="number" class="uocra-copa-pct" data-i="' + i + '" value="' + (r.copaPct||70) + '" style="width:70px;text-align:right" oninput="UOCRA[' + i + '].copaPct=parseFloat(this.value)||70;chCalcularCostoUOCRA();chCalcularUOCRA();">%</td>'
-      + '<td style="text-align:right"><input type="number" class="uocra-via-pct" data-i="' + i + '" value="' + (r.viaPct||80) + '" style="width:70px;text-align:right" oninput="UOCRA[' + i + '].viaPct=parseFloat(this.value)||80;chCalcularCostoUOCRA();chCalcularUOCRA();">%</td>'
+      + '<td style="text-align:right">'
+      +   '<input type="number" value="' + r.basico + '" style="width:110px;text-align:right"'
+      +   ' oninput="UOCRA[' + i + '].basico=parseFloat(this.value)||0;chRecalcAll();">'
+      + '</td>'
+      + '<td style="text-align:right">'
+      +   '<input type="number" value="' + (r.tarifaCopa||0) + '" style="width:110px;text-align:right" placeholder="0"'
+      +   ' oninput="UOCRA[' + i + '].tarifaCopa=parseFloat(this.value)||0;chCalcularUOCRA();">'
+      + '</td>'
+      + '<td style="text-align:right">'
+      +   '<input type="number" value="' + (r.tarifaVia||0) + '" style="width:110px;text-align:right" placeholder="0"'
+      +   ' oninput="UOCRA[' + i + '].tarifaVia=parseFloat(this.value)||0;chCalcularUOCRA();">'
+      + '</td>'
       + '</tr>';
   }).join('');
 }
 
-function chCalcularUOCRA() {
-  // Get hora nuestra from chCalcular context
-  var hb    = parseFloat((el('ch-hb')||{}).value) || 5470;
-  var cs    = (parseFloat((el('ch-cs')||{}).value) || 45) / 100;
-  var dias  = parseFloat((el('ch-dias')||{}).value) || 22;
-  var hd    = parseFloat((el('ch-hd')||{}).value) || 9;
-  var dsem  = parseFloat((el('ch-dsem')||{}).value) || 180;
-  var rm    = parseFloat((el('ch-rm')||{}).value) || 270000;
-  var pres  = parseFloat((el('ch-pres')||{}).value) || 0.2;
-  var fd    = parseFloat((el('ch-fd')||{}).value) || 0.12;
-  var pd    = parseFloat((el('ch-pd')||{}).value) || 0.5;
-  var agui  = parseFloat((el('ch-agui')||{}).value) || 60;
-  var epp   = parseFloat((el('ch-epp')||{}).value) || 80.22;
-  var vianda= parseFloat((el('ch-vianda')||{}).value) || 88.8;
-  var agua  = parseFloat((el('ch-agua')||{}).value) || 185;
+function chRecalcAll() {
+  chCalcularCostoUOCRA();
+  chCalcularGanancia();
+  chCalcularUOCRA();
+}
 
-  var revMed   = (rm / dsem) / hd;
-  var presAdc  = hb * pres;
-  var fondoDes = hb * fd;
-  var provDesp = (hb * hd * dias * pd) / (176 * 6);
-  var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
-  var horaNuestra = hb * (1 + cs) + totalAdc; // hora vía (sin COPA)
-
-  // For each empresa get hora copa
-  var empresas = CH.empresas || [];
+// ── Apertura de costos ─────────────────
+function chCalcularCostoUOCRA() {
+  var d = el('ch-uocra-costo'); if (!d) return;
+  var p = chParams();
 
   var rows = UOCRA.map(function(r) {
-    // Hora UOCRA mant (c/COPA) y parada (vía)
-    var uocraCopa = r.basico * (1 + (r.copaPct||70)/100);
-    var uocraVia  = r.basico * (1 + (r.viaPct||80)/100);
+    var A1  = r.basico;
+    var A2  = A1 * 0.20;
+    var A   = A1 + A2;
+    var B   = A * 0.2372;
+    var C   = A * 0.3321;
+    var D   = (A + B + C) * 0.16;
+    var men = A + B + C + D;
+    var hMens = p.hMens;
+    var cH  = men / hMens;
+    var revMed = p.rm / hMens;
+    var horaTotal = cH + revMed + p.epp + p.uocraZona + p.comidas + p.preocup;
+    return '<tr>'
+      + '<td style="font-weight:700">' + r.cat + '</td>'
+      + '<td style="text-align:right">$' + $f(Math.round(A1)) + '</td>'
+      + '<td style="text-align:right">$' + $f(Math.round(men)) + '</td>'
+      + '<td style="text-align:right">$' + $f(Math.round(cH)) + '</td>'
+      + '<td style="text-align:right">$' + $f(Math.round(revMed + p.epp + p.uocraZona + p.comidas + p.preocup)) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--red2)">$' + $f(Math.round(horaTotal)) + '</td>'
+      + '</tr>';
+  }).join('');
 
-    // Ganancia = UOCRA - nuestro costo
-    var ganCopa = uocraCopa - horaNuestra;
-    var ganVia  = uocraVia  - horaNuestra;
+  d.innerHTML = '<div style="overflow-x:auto"><table>'
+    + '<thead><tr>'
+    + '<th>Categor&#237;a</th>'
+    + '<th style="text-align:right">B&#225;sico</th>'
+    + '<th style="text-align:right">Costo mensual</th>'
+    + '<th style="text-align:right">Costo/hora</th>'
+    + '<th style="text-align:right">Adicionales/hora</th>'
+    + '<th style="text-align:right">HORA COMPLETA</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
 
-    function colorGan(v) {
-      return v >= 0 ? 'color:var(--grn)' : 'color:var(--red2)';
-    }
+// ── Precio de venta con ganancia y extra opcional ──
+function chCalcularGanancia() {
+  var d = el('ch-ganancia-resultado'); if (!d) return;
+  var p = chParams();
+  var ganPct   = p.ganPct / 100;
+  var extraPct = p.extraPct / 100;
+  var extraLabel = extraPct > 0 ? 'Hora +' + p.extraPct + '%' : '—';
 
-    // Also show per empresa copa
-    var empCols = empresas.map(function(emp) {
-      var factor   = 1 + emp.copa / 100;
-      var horaCopa = hb * factor * (1 + cs) + totalAdc;
-      var gan      = uocraCopa - horaCopa;
-      return '<td style="text-align:right;font-weight:700;' + colorGan(gan) + '">' + $f(Math.round(gan)) + '</td>';
-    }).join('');
+  var rows = UOCRA.map(function(r) {
+    var horaCompleta = chCostoHora(r.basico, p);
+    // Si hay extra%, la base de venta es hora * (1 + extra%)
+    var horaBase = extraPct > 0 ? horaCompleta * (1 + extraPct) : horaCompleta;
+    var ganancia  = horaBase * ganPct;
+    var precioVenta = horaBase * (1 + ganPct);
 
     return '<tr>'
       + '<td style="font-weight:700">' + r.cat + '</td>'
-      + '<td style="text-align:right">' + $f(uocraCopa) + '</td>'
-      + '<td style="text-align:right">' + $f(uocraVia) + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(horaNuestra)) + '</td>'
-      + '<td style="text-align:right;font-weight:700;' + colorGan(ganCopa) + '">' + $f(Math.round(ganCopa)) + '</td>'
-      + '<td style="text-align:right;font-weight:700;' + colorGan(ganVia) + '">' + $f(Math.round(ganVia)) + '</td>'
-      + empCols
+      + '<td style="text-align:right">$' + $f(Math.round(horaCompleta)) + '</td>'
+      + (extraPct > 0 ? '<td style="text-align:right;color:#f59e0b;font-weight:600">$' + $f(Math.round(horaBase)) + '</td>' : '')
+      + '<td style="text-align:right;color:var(--grn);font-weight:600">$' + $f(Math.round(ganancia)) + '</td>'
+      + '<td style="text-align:right;font-weight:700;font-size:15px;color:var(--red2)">$' + $f(Math.round(precioVenta)) + '</td>'
       + '</tr>';
   }).join('');
 
-  var empHeaders = empresas.map(function(emp) {
-    return '<th style="text-align:right">Gan. ' + emp.nombre + ' (COPA)</th>';
-  }).join('');
+  var extraCol = extraPct > 0 ? '<th style="text-align:right">' + extraLabel + '</th>' : '';
+  var extraSpan = extraPct > 0 ? 4 : 3;
 
-  el('uocra-resultado').innerHTML = '<div style="overflow-x:auto"><table>'
+  d.innerHTML = '<div style="overflow-x:auto"><table>'
     + '<thead><tr>'
     + '<th>Categor&#237;a</th>'
-    + '<th style="text-align:right">UOCRA Mant. (COPA)</th>'
-    + '<th style="text-align:right">UOCRA Parada (V&#237;a)</th>'
-    + '<th style="text-align:right">Nuestra hora</th>'
-    + '<th style="text-align:right">Gan. vs Mant.</th>'
-    + '<th style="text-align:right">Gan. vs Parada</th>'
-    + empHeaders
+    + '<th style="text-align:right">Hora completa</th>'
+    + extraCol
+    + '<th style="text-align:right">Ganancia (' + p.ganPct + '%)</th>'
+    + '<th style="text-align:right">PRECIO VENTA</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
+
+// ── Comparativo UOCRA vs nuestro costo ─
+function chCalcularUOCRA() {
+  var d = el('uocra-resultado'); if (!d) return;
+  var p = chParams();
+  var empresas = (typeof CH !== 'undefined' && CH.empresas) ? CH.empresas : [];
+
+  var rows = UOCRA.map(function(r) {
+    var nuestroCosto = chCostoHora(r.basico, p);
+
+    // Precio UOCRA que cobra la empresa al cliente por esta categoría
+    // según convenio: precio mant = básico * factor_copa; precio vía = básico * factor_vía
+    // Usando los valores de la tabla del Excel (fila 35/38): son precios por hora facturados
+    // Los mant70/parada80 los ingresa el usuario en inputs separados (tabla de tarifas UOCRA)
+    var tarifaCopa = r.tarifaCopa || 0;
+    var tarifaVia  = r.tarifaVia  || 0;
+
+    var ganCopa = tarifaCopa > 0 ? tarifaCopa - nuestroCosto : null;
+    var ganVia  = tarifaVia  > 0 ? tarifaVia  - nuestroCosto : null;
+
+    function colorV(v) { return v !== null && v >= 0 ? 'color:var(--grn)' : 'color:var(--red2)'; }
+    function fmtGan(v) { return v !== null ? '$' + $f(Math.round(v)) : '—'; }
+
+    return '<tr>'
+      + '<td style="font-weight:700">' + r.cat + '</td>'
+      + '<td style="text-align:right">$' + $f(Math.round(nuestroCosto)) + '</td>'
+      + '<td style="text-align:right">' + (tarifaCopa > 0 ? '$' + $f(tarifaCopa) : '—') + '</td>'
+      + '<td style="text-align:right">' + (tarifaVia  > 0 ? '$' + $f(tarifaVia)  : '—') + '</td>'
+      + '<td style="text-align:right;font-weight:700;' + colorV(ganCopa) + '">' + fmtGan(ganCopa) + '</td>'
+      + '<td style="text-align:right;font-weight:700;' + colorV(ganVia)  + '">' + fmtGan(ganVia)  + '</td>'
+      + '</tr>';
+  }).join('');
+
+  d.innerHTML = '<div style="overflow-x:auto"><table>'
+    + '<thead><tr>'
+    + '<th>Categor&#237;a</th>'
+    + '<th style="text-align:right">Nuestro costo/hora</th>'
+    + '<th style="text-align:right">Tarifa COPA cliente</th>'
+    + '<th style="text-align:right">Tarifa V&#237;a cliente</th>'
+    + '<th style="text-align:right">Gan. COPA</th>'
+    + '<th style="text-align:right">Gan. V&#237;a</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
 
 // ═══════════════════════════════════════
 // HORAS OBRA
@@ -2933,7 +2841,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
-    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){chRenderEmpresas();chCalcular();chCalcularCostoUOCRA();uocraRenderTabla();chCalcularUOCRA();},60);return;}
+    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){uocraRenderTabla();chRecalcAll();if(typeof chRenderEmpresas==='function')chRenderEmpresas();},60);return;}
     if(t.dataset&&t.dataset.tab==='horas'){setTimeout(function(){horasCargar();},60);return;}
     if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
@@ -3232,7 +3140,7 @@ document.addEventListener('DOMContentLoaded', function() {
   var chInputIds = ['ch-hb','ch-cs','ch-dias','ch-hd','ch-dsem','ch-rm','ch-pres','ch-fd','ch-pd','ch-agui','ch-epp','ch-vianda','ch-agua'];
   chInputIds.forEach(function(id) {
     var e = el(id);
-    if (e) e.addEventListener('input', function() { if (el('ch-resultado').innerHTML) chCalcular(); chCalcularCostoUOCRA(); chCalcularUOCRA(); });
+    if (e) e.addEventListener('input', function() { chRecalcAll(); });
   });
 
   // ======= PRESUPUESTO JL =======
@@ -3811,104 +3719,77 @@ document.addEventListener('DOMContentLoaded', function() {
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
     <!-- DATOS BASE -->
     <div class="card">
-      <div class="sttl">Datos base</div>
+      <div class="sttl">Datos base del convenio</div>
       <div class="fr" style="flex-direction:column;gap:10px;margin-top:0">
         <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>Hora b&#225;sica ($)</label><input type="number" id="ch-hb" value="5470"></div>
-          <div class="fg" style="flex:1"><label>Cargas sociales (%)</label><input type="number" id="ch-cs" value="45"></div>
+          <div class="fg" style="flex:1"><label>Horas mensuales</label><input type="number" id="ch-horas-mens" value="176" oninput="chRecalcAll()"><span style="font-size:11px;color:var(--txm)">176=conv. / 189=agro</span></div>
+          <div class="fg" style="flex:1"><label>Horas diarias</label><input type="number" id="ch-hd" value="9" oninput="chRecalcAll()"></div>
         </div>
         <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>D&#237;as trab. mensual</label><input type="number" id="ch-dias" value="22"></div>
-          <div class="fg" style="flex:1"><label>Horas diarias</label><input type="number" id="ch-hd" value="9"></div>
-        </div>
-        <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>D&#237;as por semestre</label><input type="number" id="ch-dsem" value="180"></div>
-          <div class="fg" style="flex:1"><label>Revis. m&#233;dica ($)</label><input type="number" id="ch-rm" value="270000"></div>
-        </div>
-        <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>Presentismo (% HB)</label><input type="number" id="ch-pres" value="0.2"></div>
-          <div class="fg" style="flex:1"><label>Fondo desempleo (%)</label><input type="number" id="ch-fd" value="0.12"></div>
-        </div>
-        <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>Prov. despido (% HB)</label><input type="number" id="ch-pd" value="0.5"></div>
+          <div class="fg" style="flex:1"><label>D&#237;as por semestre (rev. m&#233;d.)</label><input type="number" id="ch-dsem" value="180" oninput="chRecalcAll()"></div>
+          <div class="fg" style="flex:1"><label>Revis. m&#233;dica ($/mes)</label><input type="number" id="ch-rm" value="300000" oninput="chRecalcAll()"></div>
         </div>
       </div>
     </div>
-    <!-- ADICIONALES -->
+    <!-- ADICIONALES POR HORA -->
     <div class="card">
-      <div class="sttl">Adicionales por hora</div>
+      <div class="sttl">Adicionales por hora (UOCRA)</div>
       <div class="fr" style="flex-direction:column;gap:10px;margin-top:0">
         <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>Aguinaldo ($)</label><input type="number" id="ch-agui" value="60"></div>
-          <div class="fg" style="flex:1"><label>EPP ($)</label><input type="number" id="ch-epp" value="80.22"></div>
+          <div class="fg" style="flex:1"><label>EPP y ropa ($/h)</label><input type="number" id="ch-epp" value="568.18" step="0.01" oninput="chRecalcAll()"></div>
+          <div class="fg" style="flex:1"><label>Adicional zona A ($/h)</label><input type="number" id="ch-zona" value="284.09" step="0.01" oninput="chRecalcAll()"></div>
         </div>
         <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>Vianda ($)</label><input type="number" id="ch-vianda" value="88.8"></div>
-          <div class="fg" style="flex:1"><label>Agua ($)</label><input type="number" id="ch-agua" value="185"></div>
+          <div class="fg" style="flex:1"><label>Comidas UOCRA ($/h)</label><input type="number" id="ch-comidas" value="1014.20" step="0.01" oninput="chRecalcAll()"></div>
+          <div class="fg" style="flex:1"><label>Preocupacionales ($/h)</label><input type="number" id="ch-preocup" value="568.18" step="0.01" oninput="chRecalcAll()"></div>
         </div>
       </div>
-      <div class="dvd" style="margin:14px 0"></div>
-      <div class="sttl">Empresas y COPA</div>
-      <div id="ch-empresas-list" style="margin-bottom:10px"></div>
-      <div class="fr" style="margin-top:8px">
-        <input type="text" id="ch-emp-nombre" placeholder="Nombre empresa" style="flex:2">
-        <input type="number" id="ch-emp-copa" placeholder="% COPA" style="width:90px" value="70">
-        <button class="btn btns btnp" id="btn-ch-add-emp">+ Agregar</button>
-      </div>
     </div>
-  </div>
-  <!-- RESULTADOS -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div class="sttl" style="margin-bottom:0">Valor hora por empresa</div>
-      <button class="btn btns btnp" onclick="chCalcular()">&#8635; Calcular</button>
-    </div>
-    <div id="ch-resultado"></div>
   </div>
 
-  <!-- HORA FINAL POR CATEGORIA UOCRA -->
-  <div class="card" style="margin-top:14px">
-    <div style="margin-bottom:14px">
-      <div class="sttl" style="margin-bottom:2px">Apertura de costos por categor&#237;a</div>
-      <div style="font-size:11px;color:var(--txm)">Costo real de hora seg&#250;n categor&#237;a, aplicando todas las cargas sociales del convenio</div>
-    </div>
+  <!-- APERTURA DE COSTOS -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="sttl" style="margin-bottom:10px">Apertura de costos por categor&#237;a</div>
+    <p style="font-size:12px;color:var(--txm);margin-bottom:12px">Estructura según convenio UOCRA / Agro Exportador. A=básico+presentismo → B=cargas tiempo libre → C=cargas patronales → D=despido+IERIC → + adicionales</p>
     <div id="ch-uocra-costo"></div>
-    <div class="dvd" style="margin:16px 0"></div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
-      <div class="fg" style="max-width:180px">
-        <label>% Ganancia sobre costo</label>
+  </div>
+
+  <!-- PRECIO DE VENTA -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="sttl" style="margin-bottom:12px">Precio de venta</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+      <div class="fg" style="max-width:200px">
+        <label>% Ganancia deseada</label>
         <input type="number" id="ch-gan-pct" value="30" min="0" step="1" oninput="chCalcularGanancia()">
       </div>
-      <div class="fg" style="max-width:200px">
+      <div class="fg" style="max-width:220px">
         <label>% Extra sobre hora (0 = hora completa)</label>
         <input type="number" id="ch-extra-pct" value="0" min="0" step="1" oninput="chCalcularGanancia()" placeholder="ej: 40">
+        <span style="font-size:11px;color:var(--txm)">Con 40 → "hora más el 40%"</span>
       </div>
-      <button class="btn btns btnp" onclick="chCalcularGanancia()">&#8635; Actualizar</button>
     </div>
-    <div id="ch-ganancia-resultado" style="margin-top:14px"></div>
+    <div id="ch-ganancia-resultado"></div>
   </div>
 
-  <!-- UOCRA vs PRESUPUESTADO -->
-  <div class="card" style="margin-top:14px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+  <!-- COMPARATIVO UOCRA vs NUESTRO COSTO -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
       <div>
-        <div class="sttl" style="margin-bottom:2px">Hora UOCRA vs Hora Presupuestada</div>
-        <div style="font-size:11px;color:var(--txm)">Ganancia por hora seg&#250;n categor&#237;a y modalidad</div>
+        <div class="sttl" style="margin-bottom:2px">UOCRA vs Nuestro costo</div>
+        <div style="font-size:11px;color:var(--txm)">Ingres&#225; las tarifas que cobra UOCRA al cliente por categor&#237;a para ver la ganancia</div>
       </div>
-      <button class="btn btns btnp" onclick="chCalcularUOCRA()">&#8635; Actualizar</button>
+      <button class="btn btns btnp" onclick="chRecalcAll()">&#8635; Actualizar</button>
     </div>
     <div style="margin-bottom:14px">
-      <div class="sttl">Tabla UOCRA — Acuerdo Agroexportador (editables)</div>
+      <div class="sttl" style="margin-bottom:8px">Categorías UOCRA — b&#225;sicos editables</div>
       <div style="overflow-x:auto">
-        <table id="uocra-tabla">
-          <thead>
-            <tr>
-              <th>Categor&#237;a</th>
-              <th style="text-align:right">B&#225;sico UOCRA</th>
-              <th style="text-align:right">% COPA</th>
-              <th style="text-align:right">% V&#237;a</th>
-            </tr>
-          </thead>
+        <table>
+          <thead><tr>
+            <th>Categor&#237;a</th>
+            <th style="text-align:right">B&#225;sico UOCRA ($)</th>
+            <th style="text-align:right">Tarifa COPA cliente ($/h)</th>
+            <th style="text-align:right">Tarifa V&#237;a cliente ($/h)</th>
+          </tr></thead>
           <tbody id="uocra-body"></tbody>
         </table>
       </div>
