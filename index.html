@@ -1193,77 +1193,173 @@ function chGetAdicionales() {
 
 function chHoraFinal(basico) {
   var p = chGetAdicionales();
-  var cs = p.cs, dias = p.dias, hd = p.hd, dsem = p.dsem;
-  var rm = p.rm, pres = p.pres, fd = p.fd, pd = p.pd;
-  var agui = p.agui, epp = p.epp, vianda = p.vianda, agua = p.agua;
-  var revMed   = (rm / dsem) / hd;
-  var presAdc  = basico * pres;
-  var fondoDes = basico * fd;
-  var provDesp = (basico * hd * dias * pd) / (176 * 6);
-  var totalAdc = revMed + presAdc + fondoDes + provDesp + agui + epp + vianda + agua;
-  return basico * (1 + cs) + totalAdc;
+  var dias = p.dias, hd = p.hd, dsem = p.dsem;
+  var rm = p.rm, pres = p.pres, agui = p.agui, epp = p.epp, vianda = p.vianda, agua = p.agua;
+  return chHoraFinalUOCRA(basico, dias, hd, dsem, rm, pres, agui, epp, vianda, agua);
 }
 
 function chCalcularCostoUOCRA() {
   var d = el('ch-uocra-costo'); if (!d) return;
+  var hb = parseFloat((el('ch-hb')||{}).value) || 5470;
+  var cs = (parseFloat((el('ch-cs')||{}).value)||45)/100;
+  var pres = parseFloat((el('ch-pres')||{}).value)||0.2;
+  var fd   = parseFloat((el('ch-fd')||{}).value)||0.12;
+  var pd   = parseFloat((el('ch-pd')||{}).value)||0.5;
+  var dias = parseFloat((el('ch-dias')||{}).value)||22;
+  var hd   = parseFloat((el('ch-hd')||{}).value)||9;
+  var dsem = parseFloat((el('ch-dsem')||{}).value)||180;
+  var rm   = parseFloat((el('ch-rm')||{}).value)||270000;
+  var agui = parseFloat((el('ch-agui')||{}).value)||60;
+  var epp  = parseFloat((el('ch-epp')||{}).value)||80.22;
+  var vianda=parseFloat((el('ch-vianda')||{}).value)||88.8;
+  var agua = parseFloat((el('ch-agua')||{}).value)||185;
+
+  // Por cada categoría, el básico es diferente
+  var diasMens = dias || 22;
   var rows = UOCRA.map(function(r) {
-    var horaBase  = chHoraFinal(r.basico);
-    var horaMant  = chHoraFinal(r.basico * 1.70);
-    var horaParad = chHoraFinal(r.basico * 1.80);
+    var basico = r.basico;
+    var copaMult = 1 + (r.copaPct||70)/100;
+    var viaMult  = 1 + (r.viaPct||80)/100;
+    var basicoCopa = basico * copaMult;
+    var basicoVia  = basico * viaMult;
+
+    // Presentismo: 20% del básico
+    var presBasico = basico * pres;
+    var basicoConPres = basico + presBasico;
+
+    // Sub-totales según Excel: A=básico+presentismo, luego cargas sobre A
+    // B= vacaciones(5.3%) + SAC(8.33%) + feriados(5.67%) + enfermedad(2.53%) + accidente(1.89%) sobre basicoConPres
+    var B_vac  = basicoConPres * 0.053;
+    var B_sac  = basicoConPres * 0.0833;
+    var B_fer  = basicoConPres * 0.0567;
+    var B_enf  = basicoConPres * 0.0253;
+    var B_acc  = basicoConPres * 0.0189;
+    var subB   = B_vac + B_sac + B_fer + B_enf + B_acc;
+
+    // C= aportes pats(20%) + obra social(6%) + seguro col(1.21%) + ART var(6%) sobre basicoConPres
+    var C_ap   = basicoConPres * 0.20;
+    var C_os   = basicoConPres * 0.06;
+    var C_sv   = basicoConPres * 0.0121;
+    var C_art  = basicoConPres * 0.06;
+    var subC   = C_ap + C_os + C_sv + C_art;
+
+    // D= costo despido(12%) + IERIC(4%) sobre (basicoConPres + subB + subC)
+    var baseD  = basicoConPres + subB + subC;
+    var D_des  = baseD * 0.12;
+    var D_ier  = baseD * 0.04;
+    var subD   = D_des + D_ier;
+
+    var mensual = basicoConPres + subB + subC + subD;
+    var hmens   = diasMens * hd;
+    if (hmens <= 0) hmens = 189;
+    var costoHora = mensual / hmens;
+
+    // Adicionales
+    var revMed   = (rm / dsem) / hd;
+    var horaFinal = costoHora + revMed + agui + epp + vianda + agua;
+
+    // Con COPA y Vía (básico UOCRA aumentado, mismas cargas aplicadas)
+    var horaFinalCopa = chHoraFinalUOCRA(basicoCopa, diasMens, hd, dsem, rm, pres, agui, epp, vianda, agua);
+    var horaFinalVia  = chHoraFinalUOCRA(basicoVia,  diasMens, hd, dsem, rm, pres, agui, epp, vianda, agua);
+
     return '<tr>'
       + '<td style="font-weight:700">' + r.cat + '</td>'
-      + '<td style="text-align:right;font-weight:600">' + $f(Math.round(horaBase)) + '</td>'
-      + '<td style="text-align:right;font-weight:600;color:var(--blu)">' + $f(Math.round(horaMant)) + '</td>'
-      + '<td style="text-align:right;font-weight:600;color:var(--grn)">' + $f(Math.round(horaParad)) + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(basico)) + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(costoHora)) + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:var(--blu)">' + $f(Math.round(horaFinalCopa)) + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:var(--grn)">' + $f(Math.round(horaFinalVia)) + '</td>'
       + '</tr>';
   }).join('');
-  d.innerHTML = '<div style="overflow-x:auto"><table>'
+
+
+  var tblHead = '<div style="overflow-x:auto"><table>'
     + '<thead><tr>'
     + '<th>Categor&#237;a</th>'
-    + '<th style="text-align:right">Hora b&#225;sica</th>'
-    + '<th style="text-align:right">Hora Mant. (+70%)</th>'
-    + '<th style="text-align:right">Hora Parada (+80%)</th>'
+    + '<th style="text-align:right">B&#225;sico</th>'
+    + '<th style="text-align:right">Costo/hora</th>'
+    + '<th style="text-align:right">Hora COPA (+' + (UOCRA[0]||{copaPct:70}).copaPct + '%)</th>'
+    + '<th style="text-align:right">Hora V&#237;a (+' + (UOCRA[0]||{viaPct:80}).viaPct + '%)</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
   chCalcularGanancia();
+}
+
+function chHoraFinalUOCRA(basico, diasMens, hd, dsem, rm, pres, agui, epp, vianda, agua) {
+  var presBasico = basico * pres;
+  var basicoConPres = basico + presBasico;
+  var subB = basicoConPres * (0.053 + 0.0833 + 0.0567 + 0.0253 + 0.0189);
+  var subC = basicoConPres * (0.20 + 0.06 + 0.0121 + 0.06);
+  var baseD = basicoConPres + subB + subC;
+  var subD = baseD * (0.12 + 0.04);
+  var mensual = basicoConPres + subB + subC + subD;
+  var hmens = (diasMens||22) * (hd||9);
+  var costoHora = mensual / hmens;
+  var revMed = (rm / (dsem||180)) / (hd||9);
+  return costoHora + revMed + agui + epp + vianda + agua;
 }
 
 function chCalcularGanancia() {
   var d = el('ch-ganancia-resultado'); if (!d) return;
   var pct = (parseFloat((el('ch-gan-pct')||{}).value) || 30) / 100;
+  var extraPct = (parseFloat((el('ch-extra-pct')||{}).value) || 0) / 100;
+  var hb = parseFloat((el('ch-hb')||{}).value) || 5470;
+  var dias = parseFloat((el('ch-dias')||{}).value)||22;
+  var hd   = parseFloat((el('ch-hd')||{}).value)||9;
+  var dsem = parseFloat((el('ch-dsem')||{}).value)||180;
+  var rm   = parseFloat((el('ch-rm')||{}).value)||270000;
+  var pres = parseFloat((el('ch-pres')||{}).value)||0.2;
+  var agui = parseFloat((el('ch-agui')||{}).value)||60;
+  var epp  = parseFloat((el('ch-epp')||{}).value)||80.22;
+  var vianda=parseFloat((el('ch-vianda')||{}).value)||88.8;
+  var agua = parseFloat((el('ch-agua')||{}).value)||185;
+
+  var extraLabel = extraPct > 0 ? '+' + Math.round(extraPct*100) + '% extra' : 'Hora completa';
+
   var rows = UOCRA.map(function(r) {
-    var horaBase  = chHoraFinal(r.basico);
-    var horaMant  = chHoraFinal(r.basico * 1.70);
-    var horaParad = chHoraFinal(r.basico * 1.80);
-    var ganBase  = horaBase  * pct;
-    var ganMant  = horaMant  * pct;
-    var ganParad = horaParad * pct;
-    var precioBase  = horaBase  * (1 + pct);
-    var precioMant  = horaMant  * (1 + pct);
-    var precioParad = horaParad * (1 + pct);
+    var basico = r.basico;
+    var copaMult = 1 + (r.copaPct||70)/100;
+    var viaMult  = 1 + (r.viaPct||80)/100;
+    var basicoCopa = basico * copaMult;
+    var basicoVia  = basico * viaMult;
+
+    var horaCopa  = chHoraFinalUOCRA(basicoCopa, dias, hd, dsem, rm, pres, agui, epp, vianda, agua);
+    var horaVia   = chHoraFinalUOCRA(basicoVia,  dias, hd, dsem, rm, pres, agui, epp, vianda, agua);
+
+    // Si hay extra%, aplicar sobre la hora completa
+    var horaCopaExtra = horaCopa * (1 + extraPct);
+    var horaViaExtra  = horaVia  * (1 + extraPct);
+
+    // Precio venta = hora (con extra si aplica) * (1 + ganancia)
+    var precioCopa = horaCopaExtra * (1 + pct);
+    var precioVia  = horaViaExtra  * (1 + pct);
+    var ganCopa    = horaCopaExtra * pct;
+    var ganVia     = horaViaExtra  * pct;
+
     return '<tr>'
       + '<td style="font-weight:700">' + r.cat + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(horaBase)) + '</td>'
-      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganBase)) + '</td>'
-      + '<td style="text-align:right;font-weight:700">' + $f(Math.round(precioBase)) + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(horaMant)) + '</td>'
-      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganMant)) + '</td>'
-      + '<td style="text-align:right;font-weight:700">' + $f(Math.round(precioMant)) + '</td>'
-      + '<td style="text-align:right">' + $f(Math.round(horaParad)) + '</td>'
-      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganParad)) + '</td>'
-      + '<td style="text-align:right;font-weight:700">' + $f(Math.round(precioParad)) + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(horaCopa)) + '</td>'
+      + (extraPct > 0 ? '<td style="text-align:right;color:#f59e0b;font-weight:600">' + $f(Math.round(horaCopaExtra)) + '</td>' : '')
+      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganCopa)) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(Math.round(precioCopa)) + '</td>'
+      + '<td style="text-align:right">' + $f(Math.round(horaVia)) + '</td>'
+      + (extraPct > 0 ? '<td style="text-align:right;color:#f59e0b;font-weight:600">' + $f(Math.round(horaViaExtra)) + '</td>' : '')
+      + '<td style="text-align:right;color:var(--grn);font-weight:700">' + $f(Math.round(ganVia)) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(Math.round(precioVia)) + '</td>'
       + '</tr>';
   }).join('');
+
+  var extraCols = extraPct > 0 ? '<th style="text-align:right">' + extraLabel + '</th>' : '';
+  var copaPct = (UOCRA[0]||{copaPct:70}).copaPct;
+  var viaPct  = (UOCRA[0]||{viaPct:80}).viaPct;
+
   d.innerHTML = '<div style="overflow-x:auto"><table>'
     + '<thead>'
     + '<tr><th>Categor&#237;a</th>'
-    + '<th colspan="3" style="text-align:center;background:rgba(96,165,250,.08);color:var(--blu)">Hora B&#225;sica</th>'
-    + '<th colspan="3" style="text-align:center;background:rgba(34,197,94,.06);color:var(--grn)">Hora Mantenimiento (+70%)</th>'
-    + '<th colspan="3" style="text-align:center;background:rgba(245,158,11,.06);color:#f59e0b">Hora Parada (+80%)</th>'
+    + '<th colspan="' + (extraPct>0?4:3) + '" style="text-align:center;background:rgba(96,165,250,.08);color:var(--blu)">Hora COPA (+' + copaPct + '%)</th>'
+    + '<th colspan="' + (extraPct>0?4:3) + '" style="text-align:center;background:rgba(34,197,94,.06);color:var(--grn)">Hora V&#237;a (+' + viaPct + '%)</th>'
     + '</tr>'
     + '<tr><th></th>'
-    + '<th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
-    + '<th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
-    + '<th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
+    + '<th style="text-align:right">Costo/hora</th>' + extraCols + '<th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
+    + '<th style="text-align:right">Costo/hora</th>' + extraCols + '<th style="text-align:right">Ganancia</th><th style="text-align:right">Precio venta</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
@@ -1271,10 +1367,10 @@ function chCalcularGanancia() {
 // UOCRA
 // ═══════════════════════════════════════
 var UOCRA = [
-  { cat: 'Of. Especializado', basico: 5470,   mant70: 3829,    parada80: 4376   },
-  { cat: 'Oficial',           basico: 4679,   mant70: 3275.30, parada80: 3743.20 },
-  { cat: 'Medio Oficial',     basico: 4324,   mant70: 3026.80, parada80: 3459.20 },
-  { cat: 'Ayudante',          basico: 3980,   mant70: 2786,    parada80: 3184   }
+  { cat: 'Of. Especializado', basico: 5470,   copaPct: 70, viaPct: 80 },
+  { cat: 'Oficial',           basico: 4679,   copaPct: 70, viaPct: 80 },
+  { cat: 'Medio Oficial',     basico: 4324,   copaPct: 70, viaPct: 80 },
+  { cat: 'Ayudante',          basico: 3980,   copaPct: 70, viaPct: 80 }
 ];
 
 function uocraRenderTabla() {
@@ -1282,9 +1378,9 @@ function uocraRenderTabla() {
   tbody.innerHTML = UOCRA.map(function(r, i) {
     return '<tr>'
       + '<td style="font-weight:600">' + r.cat + '</td>'
-      + '<td style="text-align:right"><input type="number" class="uocra-basico" data-i="' + i + '" value="' + r.basico + '" style="width:110px;text-align:right"></td>'
-      + '<td style="text-align:right"><input type="number" class="uocra-mant" data-i="' + i + '" value="' + r.mant70 + '" style="width:110px;text-align:right"></td>'
-      + '<td style="text-align:right"><input type="number" class="uocra-parada" data-i="' + i + '" value="' + r.parada80 + '" style="width:110px;text-align:right"></td>'
+      + '<td style="text-align:right"><input type="number" class="uocra-basico" data-i="' + i + '" value="' + r.basico + '" style="width:110px;text-align:right" oninput="UOCRA[' + i + '].basico=parseFloat(this.value)||0;chCalcularCostoUOCRA();chCalcularUOCRA();"></td>'
+      + '<td style="text-align:right"><input type="number" class="uocra-copa-pct" data-i="' + i + '" value="' + (r.copaPct||70) + '" style="width:70px;text-align:right" oninput="UOCRA[' + i + '].copaPct=parseFloat(this.value)||70;chCalcularCostoUOCRA();chCalcularUOCRA();">%</td>'
+      + '<td style="text-align:right"><input type="number" class="uocra-via-pct" data-i="' + i + '" value="' + (r.viaPct||80) + '" style="width:70px;text-align:right" oninput="UOCRA[' + i + '].viaPct=parseFloat(this.value)||80;chCalcularCostoUOCRA();chCalcularUOCRA();">%</td>'
       + '</tr>';
   }).join('');
 }
@@ -1317,8 +1413,8 @@ function chCalcularUOCRA() {
 
   var rows = UOCRA.map(function(r) {
     // Hora UOCRA mant (c/COPA) y parada (vía)
-    var uocraCopa = r.mant70;
-    var uocraVia  = r.parada80;
+    var uocraCopa = r.basico * (1 + (r.copaPct||70)/100);
+    var uocraVia  = r.basico * (1 + (r.viaPct||80)/100);
 
     // Ganancia = UOCRA - nuestro costo
     var ganCopa = uocraCopa - horaNuestra;
@@ -3773,18 +3869,21 @@ document.addEventListener('DOMContentLoaded', function() {
   <!-- HORA FINAL POR CATEGORIA UOCRA -->
   <div class="card" style="margin-top:14px">
     <div style="margin-bottom:14px">
-      <div class="sttl" style="margin-bottom:2px">Hora final por categor&#237;a UOCRA</div>
-      <div style="font-size:11px;color:var(--txm)">Costo real de hora seg&#250;n categor&#237;a, aplicando cargas y adicionales</div>
+      <div class="sttl" style="margin-bottom:2px">Apertura de costos por categor&#237;a</div>
+      <div style="font-size:11px;color:var(--txm)">Costo real de hora seg&#250;n categor&#237;a, aplicando todas las cargas sociales del convenio</div>
     </div>
     <div id="ch-uocra-costo"></div>
     <div class="dvd" style="margin:16px 0"></div>
-    <div class="sttl">Ganancia deseada</div>
-    <div class="fr" style="margin-top:8px;align-items:flex-end">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
       <div class="fg" style="max-width:180px">
         <label>% Ganancia sobre costo</label>
-        <input type="number" id="ch-gan-pct" value="30" min="0" step="1">
+        <input type="number" id="ch-gan-pct" value="30" min="0" step="1" oninput="chCalcularGanancia()">
       </div>
-      <button class="btn btns btnp" onclick="chCalcularGanancia()">Calcular</button>
+      <div class="fg" style="max-width:200px">
+        <label>% Extra sobre hora (0 = hora completa)</label>
+        <input type="number" id="ch-extra-pct" value="0" min="0" step="1" oninput="chCalcularGanancia()" placeholder="ej: 40">
+      </div>
+      <button class="btn btns btnp" onclick="chCalcularGanancia()">&#8635; Actualizar</button>
     </div>
     <div id="ch-ganancia-resultado" style="margin-top:14px"></div>
   </div>
@@ -3805,9 +3904,9 @@ document.addEventListener('DOMContentLoaded', function() {
           <thead>
             <tr>
               <th>Categor&#237;a</th>
-              <th style="text-align:right">Salario b&#225;sico</th>
-              <th style="text-align:right">Mant. 70%</th>
-              <th style="text-align:right">Parada 80%</th>
+              <th style="text-align:right">B&#225;sico UOCRA</th>
+              <th style="text-align:right">% COPA</th>
+              <th style="text-align:right">% V&#237;a</th>
             </tr>
           </thead>
           <tbody id="uocra-body"></tbody>
