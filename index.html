@@ -593,46 +593,57 @@ select option{background:var(--bg2)}
     </div>
 
     <div id="valorhora" class="page">
-      <div class="card" style="margin-bottom:14px"><div class="sttl" style="margin-bottom:12px">Empresas y Factor COPA</div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Empresa</th><th style="text-align:right">% COPA</th><th style="text-align:right">Factor</th><th></th></tr></thead><tbody id="vh-emp-body"></tbody></table></div>
-        <button class="btn btns" style="margin-top:10px" onclick="vhAgregarEmpresa()">+ Agregar empresa</button>
-      </div>
-      <div class="two" style="gap:14px;margin-bottom:14px">
-        <div class="card"><div class="sttl" style="margin-bottom:12px">Valores base</div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <div class="fg"><label>Hora básica (ARS)</label><input type="number" id="vh-hora-basica" value="5268" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Cargas sociales (%)</label><input type="number" id="vh-cargas" value="45" step="0.1" oninput="vhCalcular()"></div>
+      <div class="card" style="margin-bottom:14px;border-top:3px solid var(--red2)">
+        <div class="sttl" style="margin-bottom:4px">Cálculo Horas Hombre — Apertura de Costos</div>
+        <p style="font-size:12px;color:var(--txm);margin-bottom:14px">Ingresá el <strong>Sueldo Básico</strong> (celda variable) y el resto se recalcula automáticamente. Las horas mensuales base son 189 (jornal de 9 hs × 21 días).</p>
+        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+          <div class="fg" style="max-width:220px">
+            <label style="font-weight:700;color:var(--red2)">★ Sueldo Básico (VARIABLE)</label>
+            <input type="number" id="hh-basico" value="7954.3" step="0.01" oninput="hhCalc()" style="border:2px solid var(--red2);font-weight:700;font-size:15px">
           </div>
-        </div>
-        <div class="card"><div class="sttl" style="margin-bottom:12px">Adicionales ($/hora)</div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <div class="fg"><label>Revisión médica (mensual)</label><input type="number" id="vh-rev-med" value="270000" oninput="vhCalcular()"><span style="font-size:11px;color:var(--txm)">/180/9</span></div>
-            <div class="fg"><label>Fondo desempleo</label><input type="number" id="vh-fondo" value="1.2" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Aguinaldo</label><input type="number" id="vh-aguinaldo" value="60" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>EPP</label><input type="number" id="vh-epp" value="80.22" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Vianda</label><input type="number" id="vh-vianda" value="88.8" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Agua</label><input type="number" id="vh-agua" value="185" step="0.01" oninput="vhCalcular()"></div>
+          <div class="fg" style="max-width:160px">
+            <label>Horas mensuales</label>
+            <input type="number" id="hh-hs-mes" value="189" step="1" oninput="hhCalc()">
+          </div>
+          <div class="fg" style="max-width:160px">
+            <label>Jornal (horas/día)</label>
+            <input type="number" id="hh-jornal-hs" value="9" step="1" oninput="hhCalc()">
           </div>
         </div>
       </div>
-      <div class="card" style="margin-bottom:14px"><div class="sttl" style="margin-bottom:10px">Detalle adicionales</div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="sttl" style="margin-bottom:10px">Apertura de Costos</div>
+        <div style="overflow-x:auto">
+          <table id="hh-tabla" style="min-width:620px;font-size:13px">
+            <thead>
+              <tr style="background:var(--bg2)">
+                <th style="width:60px">ITEM</th>
+                <th>CONCEPTO</th>
+                <th style="text-align:right;width:100px">VARIABLE</th>
+                <th style="text-align:right;width:130px">MENSUAL</th>
+                <th style="text-align:right;width:120px">COSTO HORA</th>
+                <th style="width:36px"></th>
+              </tr>
+            </thead>
+            <tbody id="hh-body"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btns" onclick="hhAgregarConcepto()">+ Agregar concepto</button>
+          <button class="btn" style="background:var(--bg2);color:var(--txm);border:1px solid var(--brd)" onclick="hhRestaurar()">↺ Restaurar defaults</button>
+        </div>
+      </div>
+
+      <div class="card" style="border-top:3px solid var(--green)">
+        <div class="sttl" style="margin-bottom:10px">Resumen</div>
         <div class="totbox">
-          <div class="trow"><span>Revisión médica</span><span id="vh-d-revmed">$0</span></div>
-          <div class="trow"><span>Fondo desempleo</span><span id="vh-d-fondo">$0</span></div>
-          <div class="trow"><span>Aguinaldo</span><span id="vh-d-aguinaldo">$0</span></div>
-          <div class="trow"><span>EPP</span><span id="vh-d-epp">$0</span></div>
-          <div class="trow"><span>Vianda</span><span id="vh-d-vianda">$0</span></div>
-          <div class="trow"><span>Agua</span><span id="vh-d-agua">$0</span></div>
-          <div class="trow fin"><span>Total adicionales</span><span id="vh-d-total">$0</span></div>
+          <div class="trow"><span>Costo hora sin EPP</span><span id="hh-res-sinEPP" style="font-weight:600">$0</span></div>
+          <div class="trow fin"><span style="font-weight:700">TOTAL HORA COMPLETA</span><span id="hh-res-total" style="font-weight:700;color:var(--green);font-size:15px">$0</span></div>
+          <div class="trow" style="margin-top:8px"><span>Hora + 40% (nocturna)</span><span id="hh-res-40" style="font-weight:600;color:var(--blu)">$0</span></div>
+          <div class="trow"><span>Jornal completo (<span id="hh-res-jornal-label">9 hs</span>)</span><span id="hh-res-jornal" style="font-weight:600">$0</span></div>
+          <div class="trow"><span>Mensual estimado</span><span id="hh-res-mensual" style="font-weight:600">$0</span></div>
         </div>
-      </div>
-      <div class="card"><div class="sttl" style="margin-bottom:12px">Resultado por empresa</div>
-        <div style="overflow-x:auto"><table><thead><tr>
-          <th>Empresa</th><th style="text-align:right">Hora base</th><th style="text-align:right">+COPA</th>
-          <th style="text-align:right">+Cargas</th><th style="text-align:right">+Adic.</th>
-          <th style="text-align:right;color:var(--red2)">HORA COPA</th>
-          <th style="text-align:right;color:var(--blu)">HORA VIA</th>
-        </tr></thead><tbody id="vh-result-body"></tbody></table></div>
       </div>
     </div>
 
@@ -2833,17 +2844,211 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ═══ VH ═══
   var VH={empresas:[{nombre:'BUNGE',pctCopa:70},{nombre:'T6',pctCopa:70},{nombre:'RENOVA',pctCopa:70},{nombre:'ACA',pctCopa:63}]};
-  function vhFmt(n){return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
-  function vhRenderEmpresas(){var tb=el('vh-emp-body');if(!tb)return;tb.innerHTML='';VH.empresas.forEach(function(emp,i){var tr=document.createElement('tr');tr.innerHTML='<td><input type="text" style="width:110px" value="'+emp.nombre.replace(/"/g,'&quot;')+'"></td><td style="text-align:right"><input type="number" style="width:70px;text-align:right" value="'+emp.pctCopa+'" min="0" step="1"></td><td style="text-align:right;font-weight:700;color:var(--red2)" class="vh-f">'+(1+emp.pctCopa/100).toFixed(2)+'</td><td><button class="btn btns btnd">x</button></td>';tr.querySelectorAll('input')[0].addEventListener('input',function(){VH.empresas[i].nombre=this.value;});tr.querySelectorAll('input')[1].addEventListener('input',(function(idx,row){return function(){VH.empresas[idx].pctCopa=parseFloat(this.value)||0;row.querySelector('.vh-f').textContent=(1+VH.empresas[idx].pctCopa/100).toFixed(2);vhCalcular();};})(i,tr));tr.querySelector('button').addEventListener('click',(function(idx){return function(){VH.empresas.splice(idx,1);vhRenderEmpresas();vhCalcular();};})(i));tb.appendChild(tr);});}
-  function vhAgregarEmpresa(){VH.empresas.push({nombre:'Nueva',pctCopa:70});vhRenderEmpresas();vhCalcular();}
-  function vhCalcular(){var hb=parseFloat((el('vh-hora-basica')||{}).value)||5268,cs=(parseFloat((el('vh-cargas')||{}).value)||45)/100,revMed=((parseFloat((el('vh-rev-med')||{}).value)||270000)/180)/9,fondo=parseFloat((el('vh-fondo')||{}).value)||1.2,aguin=parseFloat((el('vh-aguinaldo')||{}).value)||60,epp=parseFloat((el('vh-epp')||{}).value)||80.22,vianda=parseFloat((el('vh-vianda')||{}).value)||88.8,agua=parseFloat((el('vh-agua')||{}).value)||185,adic=revMed+fondo+aguin+epp+vianda+agua;function sd(id,v){var e=el(id);if(e)e.textContent=vhFmt(v);}sd('vh-d-revmed',revMed);sd('vh-d-fondo',fondo);sd('vh-d-aguinaldo',aguin);sd('vh-d-epp',epp);sd('vh-d-vianda',vianda);sd('vh-d-agua',agua);sd('vh-d-total',adic);var horaVia=hb*(1+cs)+adic;var tb=el('vh-result-body');if(!tb)return;tb.innerHTML=VH.empresas.map(function(emp){var factor=1+emp.pctCopa/100,horaCopa=hb*factor,conCS=horaCopa*(1+cs),horaFin=conCS+adic;return '<tr><td style="font-weight:600">'+emp.nombre+'</td><td style="text-align:right">'+vhFmt(hb)+'</td><td style="text-align:right">'+vhFmt(horaCopa-hb)+'</td><td style="text-align:right">'+vhFmt(conCS-horaCopa)+'</td><td style="text-align:right">'+vhFmt(adic)+'</td><td style="text-align:right;font-weight:700;color:var(--red2)">'+vhFmt(horaFin)+'</td><td style="text-align:right;font-weight:700;color:var(--blu)">'+vhFmt(horaVia)+'</td></tr>';}).join('');}
+  // ═══ CÁLCULO HH ═══
+  var HH_DEFAULTS = [
+    {item:'A.1', concepto:'SUELDO BASICO', tipo:'basico', variable:null, editable:false},
+    {item:'A.2', concepto:'PRESENTISMO', tipo:'pct_basico', variable:0.20, editable:true},
+    {item:'A',   concepto:'BASICO', tipo:'subtotal', items:['A.1','A.2'], editable:false},
+    {item:'B.1', concepto:'VACACIONES', tipo:'pct_a', variable:0.053, editable:true},
+    {item:'B.2', concepto:'S.A.C.', tipo:'pct_a', variable:0.0833, editable:true},
+    {item:'B.3', concepto:'FERIADOS', tipo:'pct_a', variable:0.0567, editable:true},
+    {item:'B.4', concepto:'ENFERMEDAD', tipo:'pct_a', variable:0.0253, editable:true},
+    {item:'B.5', concepto:'ACCIDENTE', tipo:'pct_a', variable:0.0189, editable:true},
+    {item:'B',   concepto:'SUB TOTAL 1', tipo:'subtotal', items:['B.1','B.2','B.3','B.4','B.5'], editable:false},
+    {item:'C.1', concepto:'APORTES PREVISIONALES', tipo:'pct_a', variable:0.20, editable:true},
+    {item:'C.2', concepto:'OBRA SOCIAL', tipo:'pct_a', variable:0.06, editable:true},
+    {item:'C.3', concepto:'SEGURO COLECTIVO DE VIDA Y SEP', tipo:'pct_a', variable:0.0121, editable:true},
+    {item:'C.4', concepto:'A.R.T. FIJO', tipo:'fijo_mensual', variable:0, editable:true},
+    {item:'C.5', concepto:'A.R.T. VARIABLE', tipo:'pct_a', variable:0.06, editable:true},
+    {item:'C.6', concepto:'SEGURO DE VIDA OBLIGATORIO', tipo:'fijo_mensual', variable:0, editable:true},
+    {item:'C',   concepto:'SUB TOTAL 2', tipo:'subtotal', items:['C.1','C.2','C.3','C.4','C.5','C.6'], editable:false},
+    {item:'D.1', concepto:'COSTO DE DESPIDO', tipo:'pct_abcd', variable:0.12, editable:true},
+    {item:'D.2', concepto:'IERIC', tipo:'pct_d1', variable:0.04, editable:true},
+    {item:'D',   concepto:'SUB TOTAL 3', tipo:'subtotal', items:['D.1','D.2'], editable:false},
+    {item:'E.1', concepto:'GASTOS ADMINISTRATIVOS', tipo:'pct_abc', variable:0, editable:true},
+    {item:'E',   concepto:'SUB TOTAL 4', tipo:'subtotal', items:['E.1'], editable:false},
+    {item:'F',   concepto:'UTILIDAD BRUTA', tipo:'pct_abcde', variable:0.02, editable:true},
+    {item:'G',   concepto:'IMPUESTO A LAS GANANCIAS', tipo:'pct_f', variable:0.01, editable:true},
+    {item:'H',   concepto:'IMPUESTOS MUNIC + INGR.BRUTOS', tipo:'pct_abcde', variable:0.04, editable:true},
+    {item:'J',   concepto:'INDUMENTARIA Y EPP', tipo:'fijo_mensual', variable:100000, editable:true},
+    {item:'L',   concepto:'ADICIONAL UOCRA ZONA A.', tipo:'fijo_mensual', variable:50000, editable:true},
+    {item:'M',   concepto:'COMIDAS UOCRA', tipo:'fijo_mensual', variable:178500, editable:true},
+    {item:'N',   concepto:'PREOCUPACIONALES', tipo:'fijo_mensual', variable:300000, editable:true},
+    {item:'O',   concepto:'ADICIONAL UOCRA COPA', tipo:'fijo_mensual', variable:100000, editable:true}
+  ];
+
+  var HH = {filas: JSON.parse(JSON.stringify(HH_DEFAULTS))};
+
+  function hhFmt(n){return '$'+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function hhPct(n){return (n*100).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';}
+
+  function hhCalc(){
+    var basico = parseFloat((el('hh-basico')||{}).value)||7954.3;
+    var hsMes  = parseFloat((el('hh-hs-mes')||{}).value)||189;
+    var jornalHs = parseFloat((el('hh-jornal-hs')||{}).value)||9;
+
+    // Calcular mensuales y hora para cada fila
+    var mens = {}, hora = {};
+    var filas = HH.filas;
+
+    // Primero calcular A.1 (basico)
+    var basicoMens = basico * hsMes;
+    mens['A.1'] = basicoMens;
+    hora['A.1'] = basico;
+
+    // Iterar filas calculando según tipo
+    for(var i=0;i<filas.length;i++){
+      var f = filas[i];
+      if(f.item==='A.1') continue;
+      var v = parseFloat(f.variable)||0;
+      if(f.tipo==='pct_basico'){
+        mens[f.item] = basicoMens * v;
+        hora[f.item] = basico * v;
+      } else if(f.tipo==='subtotal'){
+        var sumM=0, sumH=0;
+        (f.items||[]).forEach(function(k){sumM+=(mens[k]||0); sumH+=(hora[k]||0);});
+        mens[f.item]=sumM; hora[f.item]=sumH;
+      } else if(f.tipo==='pct_a'){
+        var mA = mens['A']||0, hA = hora['A']||0;
+        mens[f.item] = mA * v; hora[f.item] = hA * v;
+      } else if(f.tipo==='fijo_mensual'){
+        mens[f.item] = v;
+        hora[f.item] = v / hsMes;
+      } else if(f.tipo==='pct_abcd'){
+        // D.1: 12% de (A+B+C)
+        var base = (mens['A']||0)+(mens['B']||0)+(mens['C']||0);
+        mens[f.item] = base * v;
+        hora[f.item] = ((hora['A']||0)+(hora['B']||0)+(hora['C']||0)) * v;
+      } else if(f.tipo==='pct_d1'){
+        // D.2 IERIC: 4% de D.1
+        var baseH = (hora['D.1']||0)+(hora['A']||0)+(hora['B']||0)+(hora['C']||0);
+        mens[f.item] = (mens['D.1']||0) * v;
+        hora[f.item] = baseH * v * 0.1; // simplificado proporcional
+        // Recalc exacto: D.2 = D.1 * v
+        mens[f.item] = (mens['D.1']||0) * v;
+        hora[f.item] = (hora['D.1']||0) * v;
+      } else if(f.tipo==='pct_abc'){
+        var baseM3 = (mens['A']||0)+(mens['B']||0)+(mens['C']||0);
+        var baseH3 = (hora['A']||0)+(hora['B']||0)+(hora['C']||0);
+        mens[f.item] = baseM3 * v; hora[f.item] = baseH3 * v;
+      } else if(f.tipo==='pct_abcde'){
+        // F, H: sobre suma de A+B+C+D+E (acumulado hasta ese punto)
+        var sumM4=0, sumH4=0;
+        ['A','B','C','D','E'].forEach(function(k){sumM4+=(mens[k]||0); sumH4+=(hora[k]||0);});
+        mens[f.item] = sumM4 * v; hora[f.item] = sumH4 * v;
+      } else if(f.tipo==='pct_f'){
+        // G: % sobre F
+        mens[f.item] = (mens['F']||0) * v;
+        hora[f.item] = (hora['F']||0) * v;
+      }
+    }
+
+    // Renderizar tabla
+    var tb = el('hh-body');
+    if(!tb) return;
+    tb.innerHTML = '';
+    filas.forEach(function(f,idx){
+      var esSubtotal = f.tipo==='subtotal';
+      var esCustom = f.tipo==='custom';
+      var tr = document.createElement('tr');
+      if(esSubtotal) tr.style.cssText='background:var(--bg2);font-weight:700;';
+
+      var varTxt = '';
+      if(f.variable!==null && f.variable!==undefined && !esSubtotal){
+        if(f.tipo==='fijo_mensual') varTxt = hhFmt(f.variable);
+        else varTxt = hhPct(f.variable);
+      }
+
+      var itemCell = '<td style="font-weight:600;color:var(--txm);font-size:12px">'+f.item+'</td>';
+      var concCell = '<td>'+(esSubtotal?'<span style="text-transform:uppercase">'+f.concepto+'</span>':f.concepto)+'</td>';
+      var varCell = '<td style="text-align:right">';
+      if(!esSubtotal && f.editable){
+        if(f.tipo==='fijo_mensual'){
+          varCell += '<input type="number" value="'+(f.variable||0)+'" step="1000" style="width:110px;text-align:right;font-size:12px" data-idx="'+idx+'" onchange="hhUpdateVar(this)">';
+        } else if(f.tipo!=='basico'){
+          varCell += '<input type="number" value="'+(f.variable!==null?(f.variable*100).toFixed(4):'')+'" step="0.01" style="width:70px;text-align:right;font-size:12px" data-idx="'+idx+'" data-pct="1" onchange="hhUpdateVar(this)"><span style="font-size:11px;color:var(--txm)">%</span>';
+        }
+      } else {
+        varCell += varTxt;
+      }
+      varCell += '</td>';
+
+      var mVal = mens[f.item]||0;
+      var hVal = hora[f.item]||0;
+      var mensCell = '<td style="text-align:right'+(esSubtotal?';color:var(--red2)':'')+'">'+hhFmt(mVal)+'</td>';
+      var horaCell = '<td style="text-align:right'+(esSubtotal?';color:var(--green)':'')+'">'+hhFmt(hVal)+'</td>';
+
+      var delCell = '<td style="text-align:center">';
+      if(f.tipo==='custom' || (f.editable && ['fijo_mensual'].indexOf(f.tipo)>=0 && ['J','L','M','N','O'].indexOf(f.item)<0)){
+        delCell += '<button class="btn btns btnd" style="padding:2px 6px;font-size:11px" data-del="'+idx+'">x</button>';
+      }
+      delCell += '</td>';
+
+      tr.innerHTML = itemCell + concCell + varCell + mensCell + horaCell + delCell;
+      tb.appendChild(tr);
+    });
+
+    // Botones de borrar conceptos custom
+    tb.querySelectorAll('[data-del]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var i = parseInt(this.getAttribute('data-del'));
+        HH.filas.splice(i,1);
+        hhCalc();
+      });
+    });
+
+    // Calcular total hora completa (suma de todas las costo hora)
+    var totalHora = 0;
+    filas.forEach(function(f){
+      if(f.tipo!=='subtotal') totalHora += (hora[f.item]||0);
+    });
+    // Recalc correcto: solo leafs (no subtotales, que ya son suma)
+    // Total = suma de todas las hojas no-subtotal
+    var leafItems = filas.filter(function(f){return f.tipo!=='subtotal';}).map(function(f){return f.item;});
+    totalHora = leafItems.reduce(function(s,k){return s+(hora[k]||0);},0);
+
+    var sinEPP = totalHora - (hora['J']||0) - (hora['L']||0) - (hora['M']||0) - (hora['N']||0) - (hora['O']||0);
+    // sinEPP = solo lo de A+B+C+D+E+F+G+H
+    var sinEPP2 = (hora['A']||0)+(hora['B']||0)+(hora['C']||0)+(hora['D']||0)+(hora['E']||0)+(hora['F']||0)+(hora['G']||0)+(hora['H']||0);
+    if(el('hh-res-sinEPP')) el('hh-res-sinEPP').textContent = hhFmt(sinEPP2);
+    if(el('hh-res-total'))  el('hh-res-total').textContent  = hhFmt(totalHora);
+    if(el('hh-res-40'))    el('hh-res-40').textContent    = hhFmt(totalHora * 1.4);
+    if(el('hh-res-jornal')) el('hh-res-jornal').textContent = hhFmt(totalHora * jornalHs);
+    if(el('hh-res-mensual')) el('hh-res-mensual').textContent = hhFmt(totalHora * hsMes);
+    if(el('hh-res-jornal-label')) el('hh-res-jornal-label').textContent = jornalHs+' hs';
+  }
+
+  function hhUpdateVar(input){
+    var idx = parseInt(input.getAttribute('data-idx'));
+    var isPct = input.getAttribute('data-pct')==='1';
+    var val = parseFloat(input.value)||0;
+    HH.filas[idx].variable = isPct ? val/100 : val;
+    hhCalc();
+  }
+
+  function hhAgregarConcepto(){
+    var nombre = prompt('Nombre del concepto:');
+    if(!nombre) return;
+    var monto = parseFloat(prompt('Monto mensual fijo ($):')||'0')||0;
+    var letra = String.fromCharCode(80 + HH.filas.filter(function(f){return f.tipo==='custom';}).length);
+    HH.filas.push({item:letra, concepto:nombre.toUpperCase(), tipo:'custom', variable:monto, editable:true});
+    // Agregar lógica custom al calcular: fijo_mensual
+    HH.filas[HH.filas.length-1].tipo = 'fijo_mensual';
+    hhCalc();
+  }
+
+  function hhRestaurar(){
+    if(!confirm('¿Restaurar los conceptos por defecto? Se perderán los cambios.')) return;
+    HH.filas = JSON.parse(JSON.stringify(HH_DEFAULTS));
+    hhCalc();
+  }
 
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
     if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){uocraRenderTabla();chRecalcAll();if(typeof chRenderEmpresas==='function')chRenderEmpresas();},60);return;}
     if(t.dataset&&t.dataset.tab==='horas'){setTimeout(function(){horasCargar();},60);return;}
-    if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
+    if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){hhCalc();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-bdb'){setTimeout(function(){gpDbRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-form'){setTimeout(function(){gpDbPopulateSelects();},60);return;}
