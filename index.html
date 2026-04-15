@@ -3482,33 +3482,32 @@ document.addEventListener('DOMContentLoaded', function() {
   function chhCalcHora(basico) {
     var hmes = val('chh-hmes') || 189;
 
-    // ── Fórmulas verificadas celda a celda contra Excel (basico=7954.3, hmes=189) ──
-
+    // Fórmulas verificadas contra Excel (basico=7954.3, hmes=189)
     // A: hora = basico * (1 + present%)
-    var Ah = basico * (1 + pct('chh-present'));                          // 9545.16 ✓
+    var Ah = basico * (1 + pct('chh-present'));                    // 9545.16 ✓
 
-    // B: % sobre A hora
+    // B: % sobre A (base = A)
     var Bh = Ah * (pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc')); // 2264.11 ✓
 
-    // C: % sobre A hora (base = A, NO A+B)
+    // C: % sobre A (base = A, NO A+B)
     var Ch = Ah * (pct('chh-ap')+pct('chh-os')+pct('chh-seg')+pct('chh-artv'))
-           + val('chh-artf')/hmes + val('chh-svid')/hmes;                // 3169.95 ✓
+           + val('chh-artf')/hmes + val('chh-svid')/hmes;          // 3169.95 ✓
 
-    // D.1: 12% sobre (A+B) hora — base A+B, NO A+B+C
-    var D1h = (Ah + Bh) * pct('chh-desp');                               // 1417.11 ✓
+    // D.1: % sobre (A+B) — base A+B, NO A+B+C
+    var D1h = (Ah + Bh) * pct('chh-desp');                        // 1417.11 ✓
 
-    // D.2 IERIC: % sobre D.1 hora
-    var D2h = D1h * pct('chh-ieric');                                    // 56.68 ✓
-    var Dh  = D1h + D2h;                                                 // 1473.80 ✓
+    // D.2 IERIC: % sobre D.1
+    var D2h = D1h * pct('chh-ieric');                             // 56.68 ✓
+    var Dh  = D1h + D2h;                                          // 1473.80 ✓
 
-    // E: % sobre (A+B+C+D) hora
-    var Eh = (Ah+Bh+Ch+Dh) * pct('chh-adm');                            // 0 ✓
+    // E: % sobre (A+B+C+D)
+    var Eh = (Ah+Bh+Ch+Dh) * pct('chh-adm');                     // 0 ✓
 
-    // F: % sobre (A+B+C+D+E) hora
-    var Fh = (Ah+Bh+Ch+Dh+Eh) * pct('chh-util');                        // 329.06 ✓
+    // F: % sobre (A+B+C+D+E)
+    var Fh = (Ah+Bh+Ch+Dh+Eh) * pct('chh-util');                 // 329.06 ✓
 
-    // G: % sobre F hora
-    var Gh = Fh * pct('chh-gan');                                        // 3.29 ✓
+    // G: % sobre F
+    var Gh = Fh * pct('chh-gan');                                 // 3.29 ✓
 
     // H: base mensual = (A+B+C+D+F)_mensual * % / 176
     var Am  = basico * hmes * (1 + pct('chh-present'));
@@ -3517,10 +3516,9 @@ document.addEventListener('DOMContentLoaded', function() {
     var D1m = (Am+Bm) * pct('chh-desp');
     var D2m = D1m * pct('chh-ieric');
     var Fm  = (Am+Bm+Cm+D1m+D2m) * pct('chh-util');
-    var Hh  = (Am+Bm+Cm+D1m+D2m+Fm) * pct('chh-mun') / 176;            // 180.22 ✓
+    var Hh  = (Am+Bm+Cm+D1m+D2m+Fm) * pct('chh-mun') / 176;     // 180.22 ✓
 
-    // Hora sin adicionales
-    var horaSin = Ah+Bh+Ch+Dh+Eh+Fh+Gh+Hh;                             // 16965.58 ✓
+    var horaSin = Ah+Bh+Ch+Dh+Eh+Fh+Gh+Hh;                      // 16965.58 ✓
 
     // Adicionales mensuales ÷ hmes
     var eppH  = val('chh-epp')  / hmes;
@@ -3530,92 +3528,53 @@ document.addEventListener('DOMContentLoaded', function() {
     var copaH = val('chh-copa') / hmes;
     var adicH = eppH+zonaH+comH+preoH+copaH;
 
-    // Margen
-    var margen   = pct('chh-margen');
-    var horaCon  = horaSin + adicH;
-    var horaSinM = horaSin  * (1 + margen);
-    var horaConM = horaCon  * (1 + margen);
+    var horaNormal = horaSin + adicH;                             // 20820.08 ✓
+    var hora50     = horaNormal * 1.5;
+    var hora100    = horaNormal * 2;
+    var horaNoch   = horaNormal * 1.13;
 
     return {
-      Ah:Ah, Bh:Bh, Ch:Ch, Dh:Dh, D1h:D1h, D2h:D2h, Eh:Eh, Fh:Fh, Gh:Gh, Hh:Hh,
-      horaSin:horaSin, horaSinM:horaSinM,
-      adicH:adicH, eppH:eppH, zonaH:zonaH, comH:comH, preoH:preoH, copaH:copaH,
-      horaCon:horaCon, horaConM:horaConM,
-      hora50:horaConM*1.5, hora100:horaConM*2, horaNoch:horaConM*1.13,
-      horaNormal:horaConM,  // compatibilidad con chhRenderCats
-      hmes:hmes, margen:margen
+      subA: Ah, subB: Bh, subC: Ch, subD: Dh, subE: Eh,
+      subFH: Fh+Gh+Hh, fUtil: Fh, fGan: Gh, hMuni: Hh,
+      horaSin: horaSin, adicH: adicH,
+      horaNormal: horaNormal, hora50: hora50,
+      hora100: hora100, horaNoch: horaNoch,
+      hmes: hmes
     };
   }
 
   function chhCalc() {
     var basico = val('chh-basico');
     var r = chhCalcHora(basico);
-    var jhs = Math.round(r.hmes / 21);
-    var ml  = r.margen > 0 ? ' +'+Math.round(r.margen*100)+'%' : '';
-
-    function drow(label, val, bold, color) {
-      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">'
-        +'<span'+(bold?' style="font-weight:700"':'')+'>'+label+'</span>'
-        +'<span style="font-weight:'+(bold?'700':'500')+';color:'+(color||'inherit')+'">'+$f(val)+'</span></div>';
-    }
 
     // Desglose
     var d = document.getElementById('chh-desglose');
-    if (d) d.innerHTML =
-      drow('A · Básico + presentismo/h', r.Ah) +
-      drow('B · Adic. salariales/h',     r.Bh) +
-      drow('C · Cargas sociales/h',      r.Ch) +
-      drow('D · Despido + IERIC/h',      r.Dh) +
-      drow('E · Gastos adm/h',           r.Eh) +
-      drow('F · Utilidad bruta/h',       r.Fh) +
-      drow('G · Ganancias/h',            r.Gh) +
-      drow('H · Munic + IIBB/h',         r.Hh) +
-      drow('Hora sin adicionales',        r.horaSin, true) +
-      drow('Adicionales UOCRA/h',         r.adicH);
-
-    // Adicionales detalle
-    var ad = document.getElementById('chh-adic-detalle');
-    if (ad) ad.innerHTML =
-      drow('Indumentaria/EPP',  r.eppH) +
-      drow('Zona A',            r.zonaH) +
-      drow('Comidas UOCRA',     r.comH) +
-      drow('Preocupacionales',  r.preoH) +
-      drow('COPA',              r.copaH) +
-      drow('Total adicionales/h', r.adicH, true);
+    if (d) d.innerHTML = [
+      ['A · Básico + presentismo/h', r.subA],
+      ['B · Adic. salariales/h', r.subB],
+      ['C · Cargas sociales/h', r.subC],
+      ['D · Despido + IERIC/h', r.subD],
+      ['E · Gastos adm/h', r.subE],
+      ['F-H · Util. + impuestos/h', r.subFH],
+      ['<strong>Hora sin adicionales</strong>', r.horaSin],
+      ['Adicionales UOCRA/h', r.adicH],
+    ].map(function(row) {
+      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">'
+        + '<span>' + row[0] + '</span><span style="font-weight:600">' + $f(row[1]) + '</span></div>';
+    }).join('');
 
     // Resultado
     var res = document.getElementById('chh-resultado');
     if (res) res.innerHTML =
-      drow('Sin adicionales',             r.horaSin) +
-      drow('Sin adic. + margen'+ml,       r.horaSinM) +
-      drow('Con adicionales',             r.horaCon) +
-      '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:2px solid var(--red2);margin-bottom:6px">'
-        +'<span style="font-size:15px;font-weight:700">Con adic. + margen'+ml+'</span>'
-        +'<span style="font-size:22px;font-weight:800;color:var(--red2)">'+$f(r.horaConM)+'</span></div>' +
-      drow('Hora 50%',    r.hora50) +
-      drow('Hora 100%',   r.hora100) +
-      drow('Hora nocturna', r.horaNoch) +
-      drow('Jornal '+jhs+'hs', r.horaConM*jhs, true);
+      '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="font-size:13px">Hora normal</span><span style="font-size:22px;font-weight:800;color:var(--red2)">' + $f(r.horaNormal) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora 50%</span><span style="font-weight:700">' + $f(r.hora50) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora 100%</span><span style="font-weight:700">' + $f(r.hora100) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora nocturna</span><span style="font-weight:700">' + $f(r.horaNoch) + '</span></div>' +
+      '<div style="border-top:1px solid var(--br2);margin-top:10px;padding-top:10px;display:flex;justify-content:space-between"><span style="font-size:13px">Jornal ' + r.hmes/176*9 + 'hs</span><span style="font-weight:700">' + $f(r.horaNormal * (r.hmes/176*9)) + '</span></div>';
 
-    // Spans $ debajo de cada %
-    function sv(id,v){var e=document.getElementById(id);if(e)e.textContent=$f(v);}
-    sv('chh-v-vac',  r.Ah*pct('chh-vac'));
-    sv('chh-v-sac',  r.Ah*pct('chh-sac'));
-    sv('chh-v-fer',  r.Ah*pct('chh-fer'));
-    sv('chh-v-enf',  r.Ah*pct('chh-enf'));
-    sv('chh-v-acc',  r.Ah*pct('chh-acc'));
-    sv('chh-v-ap',   r.Ah*pct('chh-ap'));
-    sv('chh-v-os',   r.Ah*pct('chh-os'));
-    sv('chh-v-seg',  r.Ah*pct('chh-seg'));
-    sv('chh-v-artv', r.Ah*pct('chh-artv'));
-    sv('chh-v-desp', r.D1h);
-    sv('chh-v-ieric',r.D2h);
-    sv('chh-v-adm',  r.Eh);
-    sv('chh-v-util', r.Fh);
-    sv('chh-v-gan',  r.Gh);
-    sv('chh-v-mun',  r.Hh);
-
+    // Actualizar tabla de categorías
     chhRenderCats();
+    // Actualizar obra si está visible
     chhObraCalc();
   }
   window.chhCalc = chhCalc;
@@ -3998,37 +3957,6 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
           <div id="chh-uocra-edit" style="display:none;margin-top:12px;border-top:1px solid var(--br);padding-top:10px">
             <div class="fg" style="margin-bottom:8px"><label>Texto de vigencia</label><input type="text" id="chh-uocra-vig-inp" style="width:100%" oninput="CHH.uocraVig=this.value;document.getElementById('chh-uocra-vig').textContent=this.value"></div>
-            <button class="btn btns" style="font-size:11px" onclick="chhUocraAddRow()">+ Agregar categoría</button>
-          </div>
-        </div>
-
-        <!-- TABLA UOCRA -->
-        <div class="card" style="margin-bottom:14px;border-top:3px solid var(--blu)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div class="sttl" style="margin:0">Tabla UOCRA</div>
-            <button class="btn btns" style="font-size:11px;padding:3px 10px" onclick="chhUocraToggleEdit()">✏️ Editar</button>
-          </div>
-          <div style="font-size:11px;color:var(--txm);margin-bottom:8px" id="chh-uocra-vig"></div>
-          <div style="overflow-x:auto">
-            <table style="min-width:500px">
-              <thead>
-                <tr style="background:var(--bg2);font-size:11px">
-                  <th>Categoría</th>
-                  <th style="text-align:right">Básico</th>
-                  <th style="text-align:right">+ Mant.</th>
-                  <th style="text-align:right">+ Parada</th>
-                  <th style="text-align:right;color:var(--blu)">Hora Mant.</th>
-                  <th style="text-align:right;color:var(--red2)">Hora Parada</th>
-                </tr>
-              </thead>
-              <tbody id="chh-uocra-body"></tbody>
-            </table>
-          </div>
-          <div id="chh-uocra-edit" style="display:none;margin-top:12px;border-top:1px solid var(--br);padding-top:10px">
-            <div class="fg" style="margin-bottom:8px">
-              <label>Texto de vigencia</label>
-              <input type="text" id="chh-uocra-vig-inp" style="width:100%" oninput="CHH.uocra_vig=this.value;document.getElementById('chh-uocra-vig').textContent=this.value;chhSv()">
-            </div>
             <button class="btn btns" style="font-size:11px" onclick="chhUocraAddRow()">+ Agregar categoría</button>
           </div>
         </div>
