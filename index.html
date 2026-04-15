@@ -3377,14 +3377,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ── CÁLCULO HORA HOMBRE ──────────────────────────────
   function chhCalcHora(basico) {
-    var hmes   = val('chh-hmes') || 176;
+    var hmes   = val('chh-hmes') || 189;
     var bMes   = basico * hmes;
 
     // A: básico + presentismo
     var present = bMes * pct('chh-present');
     var subA    = bMes + present;
 
-    // B: adicionales salariales
+    // B: adicionales salariales — base = subA (igual que Excel)
     var bVac = subA * pct('chh-vac');
     var bSac = subA * pct('chh-sac');
     var bFer = subA * pct('chh-fer');
@@ -3392,8 +3392,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var bAcc = subA * pct('chh-acc');
     var subB = bVac + bSac + bFer + bEnf + bAcc;
 
-    // C: cargas sociales
-    var base_c = subA + subB;
+    // C: cargas sociales — base = subA solo (NO A+B, igual que Excel)
+    var base_c = subA;
     var cAp  = base_c * pct('chh-ap');
     var cOs  = base_c * pct('chh-os');
     var cSeg = base_c * pct('chh-seg');
@@ -3402,10 +3402,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var cSvid = val('chh-svid') / hmes;
     var subC  = cAp + cOs + cSeg + cArtF + cArtV + cSvid;
 
-    // D: despido / IERIC (sobre subA+subB+subC)
+    // D: despido sobre (A+B+C), IERIC = 4% solo sobre D.1 (igual que Excel)
     var base_d = subA + subB + subC;
     var dDesp  = base_d * pct('chh-desp');
-    var dIeric = base_d * pct('chh-ieric');
+    var dIeric = dDesp * pct('chh-ieric');
     var subD   = dDesp + dIeric;
 
     // E: gastos adm
@@ -3481,17 +3481,17 @@ document.addEventListener('DOMContentLoaded', function() {
     chhObraCalc();
 
     // Actualizar valores $ debajo de cada %
-    var basico2 = val('chh-basico');
-    var hmes2   = val('chh-hmes') || 176;
-    var bMes2   = basico2 * hmes2;
+    var basico2  = val('chh-basico');
+    var hmes2    = val('chh-hmes') || 189;
+    var bMes2    = basico2 * hmes2;
     var present2 = bMes2 * pct('chh-present');
     var subA2    = bMes2 + present2;
     var subB2    = subA2 * (pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc'));
-    var base_c2  = subA2 + subB2;
+    var base_c2  = subA2; // C sobre A solamente (igual que Excel)
     var subC2    = base_c2*(pct('chh-ap')+pct('chh-os')+pct('chh-seg')+pct('chh-artv')) + val('chh-artf') + val('chh-svid');
     var base_d2  = subA2 + subB2 + subC2;
     var dDesp2   = base_d2 * pct('chh-desp');
-    var dIeric2  = base_d2 * pct('chh-ieric');
+    var dIeric2  = dDesp2 * pct('chh-ieric'); // IERIC = 4% de D.1 (igual que Excel)
     var base_e2  = base_d2 + dDesp2 + dIeric2;
     var eAdm2    = base_e2 * pct('chh-adm');
     var base_f2  = base_e2 + eAdm2;
@@ -3872,7 +3872,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="fr" style="margin-top:8px">
             <div class="fg"><label>Básico hora (ARS)</label><input type="number" id="chh-basico" value="7274" min="0" oninput="chhCalc()"></div>
             <div class="fg"><label>Presentismo (%)</label><input type="number" id="chh-present" value="20" min="0" step="0.1" oninput="chhCalc()"></div>
-            <div class="fg"><label>Horas/mes</label><input type="number" id="chh-hmes" value="176" min="1" oninput="chhCalc()"></div>
+            <div class="fg"><label>Horas/mes</label><input type="number" id="chh-hmes" value="189" min="1" oninput="chhCalc()"></div>
           </div>
         </div>
 
