@@ -3377,15 +3377,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ── CÁLCULO HORA HOMBRE ──────────────────────────────
   function chhCalcHora(basico) {
-    var hmes   = val('chh-hmes') || 189;
-    var bMes   = basico * hmes;
+    var hmes = val('chh-hmes') || 189;
 
-    // A: básico + presentismo — valores EN HORA
+    // ── Todas las fórmulas verificadas celda a celda contra el Excel ──
+
+    // A: básico hora + presentismo hora
     var aH  = basico;
     var a2H = basico * pct('chh-present');
-    var subAh = aH + a2H;                    // hora A
+    var subAh = aH + a2H;               // hora A = básico*(1+present%)
 
-    // B: % sobre subA hora
+    // B: % sobre subA hora (base = A)
     var bVacH = subAh * pct('chh-vac');
     var bSacH = subAh * pct('chh-sac');
     var bFerH = subAh * pct('chh-fer');
@@ -3393,44 +3394,45 @@ document.addEventListener('DOMContentLoaded', function() {
     var bAccH = subAh * pct('chh-acc');
     var subBh = bVacH+bSacH+bFerH+bEnfH+bAccH;
 
-    // C: % sobre subA hora (igual que Excel: base=A)
-    var cApH  = subAh * pct('chh-ap');
-    var cOsH  = subAh * pct('chh-os');
-    var cSegH = subAh * pct('chh-seg');
+    // C: % sobre subA hora (base = A, igual que B)
+    var cApH   = subAh * pct('chh-ap');
+    var cOsH   = subAh * pct('chh-os');
+    var cSegH  = subAh * pct('chh-seg');
     var cArtFH = val('chh-artf') / hmes;
     var cArtVH = subAh * pct('chh-artv');
     var cSvidH = val('chh-svid') / hmes;
     var subCh  = cApH+cOsH+cSegH+cArtFH+cArtVH+cSvidH;
 
-    // D: despido sobre (A+B+C) hora; IERIC = % de D.1 hora
-    var abcH   = subAh+subBh+subCh;
-    var dDespH = abcH * pct('chh-desp');
-    var dIericH= dDespH * pct('chh-ieric');
-    var subDh  = dDespH+dIericH;
+    // D.1: 12% sobre (A+B) hora — Excel usa base A+B, NO A+B+C
+    var abH   = subAh + subBh;
+    var dDespH = abH * pct('chh-desp');
 
-    // E: gastos adm sobre (A+B+C+D) hora
-    var abcdH  = abcH + subDh;
-    var eAdmH  = abcdH * pct('chh-adm');
-    var subEh  = eAdmH;
+    // D.2 IERIC: % sobre D.1 hora
+    var dIericH = dDespH * pct('chh-ieric');
+    var subDh   = dDespH + dIericH;
 
-    // F: util sobre (A+B+C+D+E) hora
+    // E: % sobre (A+B+C+D) hora
+    var abcdH = subAh+subBh+subCh+subDh;
+    var eAdmH = abcdH * pct('chh-adm');
+    var subEh = eAdmH;
+
+    // F: % sobre (A+B+C+D+E) hora
     var abcdeH = abcdH + subEh;
     var fUtilH = abcdeH * pct('chh-util');
 
-    // G: ganancias = % de F hora
-    var fGanH  = fUtilH * pct('chh-gan');
+    // G: % sobre F hora
+    var fGanH = fUtilH * pct('chh-gan');
 
-    // H: munic+IIBB — base mensual (A+B+C+D1) / 176 (fórmula exacta Excel)
-    var abcD1m = bMes*(1+pct('chh-present'))*(1 + pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc') + pct('chh-ap')+pct('chh-os')+pct('chh-seg')+pct('chh-artv'));
-    var d1m    = abcD1m * pct('chh-desp');
-    var hMuniH = (abcD1m + d1m) * pct('chh-mun') / 176;
+    // H: base mensual = (A+B+C+D+F)_mensual × % ÷ 176
+    var abcdF_m = (subAh+subBh+subCh+subDh+fUtilH) * hmes;
+    var hMuniH  = abcdF_m * pct('chh-mun') / 176;
 
     var subFHh = fUtilH + fGanH + hMuniH;
 
     // HORA SIN ADICIONALES
-    var horaSin = abcdeH + subFHh;
+    var horaSin = subAh+subBh+subCh+subDh+subEh+subFHh;
 
-    // Adicionales mensuales → por hora
+    // Adicionales mensuales ÷ hmes
     var eppH  = val('chh-epp')  / hmes;
     var zonaH = val('chh-zona') / hmes;
     var comH  = val('chh-com')  / hmes;
@@ -3439,104 +3441,96 @@ document.addEventListener('DOMContentLoaded', function() {
     var adicH = eppH+zonaH+comH+preoH+copaH;
 
     // Margen
-    var margen = pct('chh-margen');
-    var horaSinM  = horaSin  * (1 + margen);
-    var horaConM  = (horaSin + adicH) * (1 + margen);
-
-    var hora50  = horaConM * 1.5;
-    var hora100 = horaConM * 2;
-    var horaNoch= horaConM * 1.13;
+    var margen   = pct('chh-margen');
+    var horaCon  = horaSin + adicH;
+    var horaSinM = horaSin  * (1 + margen);
+    var horaConM = horaCon  * (1 + margen);
 
     return {
       subA: subAh, subB: subBh, subC: subCh,
-      subD: subDh, subE: subEh, subFH: subFHh,
+      subD: subDh, subE: subEh,
       fUtil: fUtilH, fGan: fGanH, hMuni: hMuniH,
+      subFH: subFHh,
       horaSin: horaSin, horaSinM: horaSinM,
-      adicH: adicH,
-      horaCon: horaSin+adicH,
-      horaConM: horaConM,
-      hora50: hora50, hora100: hora100, horaNoch: horaNoch,
-      hmes: hmes, margen: margen,
-      // desglose adicionales
-      eppH: eppH, zonaH: zonaH, comH: comH, preoH: preoH, copaH: copaH
+      adicH: adicH, horaCon: horaCon, horaConM: horaConM,
+      hora50: horaConM*1.5, hora100: horaConM*2, horaNoch: horaConM*1.13,
+      eppH: eppH, zonaH: zonaH, comH: comH, preoH: preoH, copaH: copaH,
+      hmes: hmes, margen: margen
     };
   }
 
   function chhCalc() {
     var basico = val('chh-basico');
     var r = chhCalcHora(basico);
+    function row(label, val, bold) {
+      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">'
+        +'<span'+(bold?' style="font-weight:700"':'')+'>'+label+'</span>'
+        +'<span style="font-weight:'+(bold?'700':'600')+'">'+ $f(val)+'</span></div>';
+    }
 
     // Desglose
     var d = document.getElementById('chh-desglose');
-    if (d) d.innerHTML = [
-      ['A · Básico + presentismo/h', r.subA],
-      ['B · Adic. salariales/h',     r.subB],
-      ['C · Cargas sociales/h',      r.subC],
-      ['D · Despido + IERIC/h',      r.subD],
-      ['E · Gastos adm/h',           r.subE],
-      ['F · Utilidad bruta/h',       r.fUtil],
-      ['G · Ganancias/h',            r.fGan],
-      ['H · Munic + IIBB/h',         r.hMuni],
-      ['<strong>Hora sin adicionales</strong>', r.horaSin],
-      ['Adicionales UOCRA/h',        r.adicH],
-    ].map(function(row) {
-      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">'
-        + '<span>' + row[0] + '</span><span style="font-weight:600">' + $f(row[1]) + '</span></div>';
-    }).join('');
+    if (d) d.innerHTML =
+      row('A · Básico + presentismo/h', r.subA) +
+      row('B · Adic. salariales/h',     r.subB) +
+      row('C · Cargas sociales/h',      r.subC) +
+      row('D · Despido + IERIC/h',      r.subD) +
+      row('E · Gastos adm/h',           r.subE) +
+      row('F · Utilidad bruta/h',       r.fUtil) +
+      row('G · Ganancias/h',            r.fGan) +
+      row('H · Munic + IIBB/h',         r.hMuni) +
+      row('Hora sin adicionales',        r.horaSin, true) +
+      row('Adicionales UOCRA/h',         r.adicH);
 
-    // Resultado
-    var res = document.getElementById('chh-resultado');
-    var jhs = Math.round(r.hmes / 21);
-    var margenLabel = r.margen > 0 ? ' (+' + Math.round(r.margen*100) + '% margen)' : '';
-    if (res) res.innerHTML =
-      '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Sin adicionales</span><span style="font-weight:700;color:var(--txm)">' + $f(r.horaSin) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Sin adic. + margen' + margenLabel + '</span><span style="font-weight:700">' + $f(r.horaSinM) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Con adicionales</span><span style="font-weight:700;color:var(--txm)">' + $f(r.horaCon) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:4px;padding:7px 0;border-bottom:2px solid var(--red2)"><span style="font-size:14px;font-weight:700">Con adic. + margen' + margenLabel + '</span><span style="font-size:22px;font-weight:800;color:var(--red2)">' + $f(r.horaConM) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px"><span>Hora 50%</span><span style="font-weight:600">' + $f(r.hora50) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px"><span>Hora 100%</span><span style="font-weight:600">' + $f(r.hora100) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px"><span>Hora nocturna</span><span style="font-weight:600">' + $f(r.horaNoch) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--br2);margin-top:6px;font-size:13px"><span>Jornal ' + jhs + 'hs</span><span style="font-weight:700">' + $f(r.horaConM * jhs) + '</span></div>';
-
-    // Adicionales recuadro
+    // Adicionales detalle
     var ad = document.getElementById('chh-adic-detalle');
     if (ad) ad.innerHTML =
-      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid var(--br)"><span>Indumentaria/EPP</span><span>' + $f(r.eppH) + '/h</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid var(--br)"><span>Zona A</span><span>' + $f(r.zonaH) + '/h</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid var(--br)"><span>Comidas UOCRA</span><span>' + $f(r.comH) + '/h</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid var(--br)"><span>Preocupacionales</span><span>' + $f(r.preoH) + '/h</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid var(--br)"><span>COPA</span><span>' + $f(r.copaH) + '/h</span></div>' +
-      '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;font-weight:700"><span>Total adicionales/h</span><span>' + $f(r.adicH) + '</span></div>';
+      row('Indumentaria/EPP',  r.eppH) +
+      row('Zona A',            r.zonaH) +
+      row('Comidas UOCRA',     r.comH) +
+      row('Preocupacionales',  r.preoH) +
+      row('COPA',              r.copaH) +
+      row('Total adicionales/h', r.adicH, true);
 
-    // Actualizar tabla de categorías
-    chhRenderCats();
-    chhObraCalc();
+    // Resultado
+    var ml = r.margen > 0 ? ' +'+Math.round(r.margen*100)+'%' : '';
+    var jhs = Math.round(r.hmes / 21);
+    var res = document.getElementById('chh-resultado');
+    if (res) res.innerHTML =
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Sin adicionales</span><span style="font-weight:600">' + $f(r.horaSin) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Sin adic. con margen'+ml+'</span><span style="font-weight:600">' + $f(r.horaSinM) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Con adicionales</span><span style="font-weight:600">' + $f(r.horaCon) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:2px solid var(--red2);margin-bottom:6px"><span style="font-size:15px;font-weight:700">Con adic. + margen'+ml+'</span><span style="font-size:22px;font-weight:800;color:var(--red2)">' + $f(r.horaConM) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>Hora 50%</span><span style="font-weight:600">' + $f(r.hora50) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>Hora 100%</span><span style="font-weight:600">' + $f(r.hora100) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>Hora nocturna</span><span style="font-weight:600">' + $f(r.horaNoch) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--br);margin-top:4px;font-size:13px"><span>Jornal '+jhs+'hs</span><span style="font-weight:700">' + $f(r.horaConM * jhs) + '</span></div>';
 
-    // Spans debajo de cada %
-    var hmes2   = val('chh-hmes') || 189;
-    var subAh2  = basico * (1 + pct('chh-present'));
-    var abcH2   = subAh2 * (1 + pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc')
-                              + pct('chh-ap')+pct('chh-os')+pct('chh-seg')+pct('chh-artv'));
-    var dDesp2  = abcH2 * pct('chh-desp');
-    var dIeric2 = dDesp2 * pct('chh-ieric');
-    var abcdeH2 = abcH2 + dDesp2 + dIeric2;
+    // Spans de valor debajo de cada %
+    var subAh = basico * (1 + pct('chh-present'));
+    var subBh = subAh * (pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc'));
+    var dDespH2 = (subAh+subBh) * pct('chh-desp');
+    var abcdeH2 = subAh+subBh+r.subC+r.subD;
     var fUtil2  = abcdeH2 * pct('chh-util');
     function sv(id,v){var e=document.getElementById(id);if(e)e.textContent=$f(v);}
-    sv('chh-v-vac',  subAh2 * pct('chh-vac'));
-    sv('chh-v-sac',  subAh2 * pct('chh-sac'));
-    sv('chh-v-fer',  subAh2 * pct('chh-fer'));
-    sv('chh-v-enf',  subAh2 * pct('chh-enf'));
-    sv('chh-v-acc',  subAh2 * pct('chh-acc'));
-    sv('chh-v-ap',   subAh2 * pct('chh-ap'));
-    sv('chh-v-os',   subAh2 * pct('chh-os'));
-    sv('chh-v-seg',  subAh2 * pct('chh-seg'));
-    sv('chh-v-artv', subAh2 * pct('chh-artv'));
-    sv('chh-v-desp', dDesp2);
-    sv('chh-v-ieric',dIeric2);
+    sv('chh-v-vac',  subAh * pct('chh-vac'));
+    sv('chh-v-sac',  subAh * pct('chh-sac'));
+    sv('chh-v-fer',  subAh * pct('chh-fer'));
+    sv('chh-v-enf',  subAh * pct('chh-enf'));
+    sv('chh-v-acc',  subAh * pct('chh-acc'));
+    sv('chh-v-ap',   subAh * pct('chh-ap'));
+    sv('chh-v-os',   subAh * pct('chh-os'));
+    sv('chh-v-seg',  subAh * pct('chh-seg'));
+    sv('chh-v-artv', subAh * pct('chh-artv'));
+    sv('chh-v-desp', dDespH2);
+    sv('chh-v-ieric',dDespH2 * pct('chh-ieric'));
     sv('chh-v-adm',  abcdeH2 * pct('chh-adm'));
     sv('chh-v-util', fUtil2);
     sv('chh-v-gan',  fUtil2 * pct('chh-gan'));
     sv('chh-v-mun',  r.hMuni);
+
+    chhRenderCats();
+    chhObraCalc();
   }
   window.chhCalc = chhCalc;
 
@@ -3898,7 +3892,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="fr" style="margin-top:8px">
             <div class="fg"><label>Básico hora (ARS)</label><input type="number" id="chh-basico" value="7274" min="0" oninput="chhCalc()"></div>
             <div class="fg"><label>Presentismo (%)</label><input type="number" id="chh-present" value="20" min="0" step="0.1" oninput="chhCalc()"></div>
-            <div class="fg"><label>Horas/mes</label><input type="number" id="chh-hmes" value="189" min="1" oninput="chhCalc()"></div>
+            <div class="fg"><label>Horas/mes</label><input type="number" id="chh-hmes" value="176" min="1" oninput="chhCalc()"></div>
           </div>
         </div>
 
@@ -3917,6 +3911,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- BLOQUE C: CARGAS SOCIALES -->
         <div class="card" style="margin-bottom:14px">
           <div class="sttl">C · Cargas sociales (%)</div>
+          <p style="font-size:11px;color:var(--txm);margin:3px 0 8px">Base = A (básico + presentismo)</p>
           <div class="fr" style="margin-top:8px">
             <div class="fg"><label>Aportes previsionales</label><input type="number" id="chh-ap" value="20" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-ap" style="font-size:11px;color:var(--txm)">$0</span></div>
             <div class="fg"><label>Obra social</label><input type="number" id="chh-os" value="6" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-os" style="font-size:11px;color:var(--txm)">$0</span></div>
@@ -3930,6 +3925,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- BLOQUE D: DESPIDO / IERIC -->
         <div class="card" style="margin-bottom:14px">
           <div class="sttl">D · Indemnización / IERIC (%)</div>
+          <p style="font-size:11px;color:var(--txm);margin:3px 0 8px">D.1 base = A+B · D.2 (IERIC) base = D.1</p>
           <div class="fr" style="margin-top:8px">
             <div class="fg"><label>Costo despido</label><input type="number" id="chh-desp" value="12" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-desp" style="font-size:11px;color:var(--txm)">$0</span></div>
             <div class="fg"><label>IERIC</label><input type="number" id="chh-ieric" value="4" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-ieric" style="font-size:11px;color:var(--txm)">$0</span></div>
@@ -3942,30 +3938,29 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="fr" style="margin-top:8px">
             <div class="fg"><label>Gastos administrativos</label><input type="number" id="chh-adm" value="0" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-adm" style="font-size:11px;color:var(--txm)">$0</span></div>
             <div class="fg"><label>Utilidad bruta</label><input type="number" id="chh-util" value="2" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-util" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Ganancias</label><input type="number" id="chh-gan" value="1" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-gan" style="font-size:11px;color:var(--txm)">$0</span></div>
+            <div class="fg"><label>Ganancias (% de F)</label><input type="number" id="chh-gan" value="1" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-gan" style="font-size:11px;color:var(--txm)">$0</span></div>
             <div class="fg"><label>Municipales / Ing. brutos</label><input type="number" id="chh-mun" value="1" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-mun" style="font-size:11px;color:var(--txm)">$0</span></div>
           </div>
         </div>
 
         <!-- BLOQUE ADICIONALES UOCRA -->
         <div class="card" style="margin-bottom:14px;border-top:3px solid var(--blu)">
-          <div class="sttl">Adicionales UOCRA — prorrateo mensual ÷ horas</div>
-          <p style="font-size:11px;color:var(--txm);margin:4px 0 10px">Ingresá el monto mensual de cada adicional. Se divide por las horas/mes para obtener el valor por hora.</p>
+          <div class="sttl">Adicionales UOCRA — monto mensual ÷ horas/mes</div>
           <div class="fr" style="margin-top:8px">
             <div class="fg"><label>Indumentaria / EPP</label><input type="number" id="chh-epp" value="100000" min="0" oninput="chhCalc()"></div>
             <div class="fg"><label>Adicional zona A</label><input type="number" id="chh-zona" value="50000" min="0" oninput="chhCalc()"></div>
             <div class="fg"><label>Comidas UOCRA</label><input type="number" id="chh-com" value="178500" min="0" oninput="chhCalc()"></div>
-            <div class="fg"><label>Preocupacionales</label><input type="number" id="chh-preo" value="100000" min="0" oninput="chhCalc()"></div>
+            <div class="fg"><label>Preocupacionales</label><input type="number" id="chh-preo" value="300000" min="0" oninput="chhCalc()"></div>
             <div class="fg"><label>Adicional COPA</label><input type="number" id="chh-copa" value="100000" min="0" oninput="chhCalc()"></div>
           </div>
           <div id="chh-adic-detalle" style="margin-top:10px;border-top:1px solid var(--br);padding-top:8px"></div>
         </div>
 
-        <!-- BLOQUE MARGEN -->
-        <div class="card" style="margin-bottom:14px;border-top:3px solid var(--green)">
+        <!-- MARGEN -->
+        <div class="card" style="border-top:3px solid var(--green)">
           <div class="sttl">Margen</div>
-          <p style="font-size:11px;color:var(--txm);margin:4px 0 10px">Se aplica sobre la hora con y sin adicionales para obtener el precio de venta final.</p>
-          <div class="fg" style="max-width:160px">
+          <p style="font-size:11px;color:var(--txm);margin:3px 0 10px">Se aplica sobre hora con y sin adicionales para obtener precio de venta.</p>
+          <div class="fg" style="max-width:150px">
             <label>Margen (%)</label>
             <input type="number" id="chh-margen" value="0" min="0" step="0.5" oninput="chhCalc()">%
           </div>
