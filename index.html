@@ -3376,159 +3376,264 @@ document.addEventListener('DOMContentLoaded', function() {
   function val(id) { return parseFloat(document.getElementById(id).value) || 0; }
 
   // ── CÁLCULO HORA HOMBRE ──────────────────────────────
-  function chhCalcHora(basico) {
-    var hmes   = val('chh-hmes') || 189;
-    var bMes   = basico * hmes;
+  // ── DATOS de la tabla CHH_DATA ──
+  // Fila del Excel → config (ITEM, CONCEPTO, tipo, variable default, base mensual)
+  // Tipos de base (cómo calcula mensual y hora):
+  //   basico:        C8 * hmes (A.1)
+  //   pct_D8:        D8 * var (A.2 presentismo)
+  //   subtotal:      suma de ítems hijos
+  //   pct_D10:       D10 (A) * var  (B.1 a B.5)
+  //   pct_AB:        (D8+D9+D16) = D10+D16 ← usa para C.1 "APORTES"
+  //                  Excel: C.1 = (D8+D16+D9)*C17 = (A+B)*C17
+  //   pct_A:         (D8+D9) * var (C.2, C.3, C.5)
+  //   fijo_mens:     monto fijo mensual
+  //   pct_AB_D:      D.1 = (A+B) * var, D.2 = D1*var (IERIC)
+  //   pct_D1:        D.2 IERIC = D1 * var
+  //   fijo_gastos:   E.1 = 800000, hora = (800k/hmes)/ops
+  //   pct_ABCDE:     F = (A+B+C+D+E) * var
+  //   pct_D29:       G = D29 * var (ganancias)
+  //   pct_ABCDEF:    H = (A+B+C+D+E+F) * var, hora = mensual/176 (NO hmes)
 
-    // A: básico + presentismo
-    var present = bMes * pct('chh-present');
-    var subA    = bMes + present;
-    // En horas: Ah = basico*(1+present%)
-    var Ah = basico * (1 + pct('chh-present'));
+  var CHH_CONF = [
+    { item:'A.1', nombre:'Sueldo básico',                   tipo:'basico',     dflt:0.00,   showVar:false },
+    { item:'A.2', nombre:'Presentismo',                     tipo:'pct_D8',     dflt:0.20,   showVar:true  },
+    { item:'A',   nombre:'BÁSICO',                          tipo:'sub',        subs:['A.1','A.2'], showVar:false },
+    { item:'B.1', nombre:'Vacaciones',                      tipo:'pct_D10',    dflt:0.053,  showVar:true  },
+    { item:'B.2', nombre:'SAC',                             tipo:'pct_D10',    dflt:0.0833, showVar:true  },
+    { item:'B.3', nombre:'Feriados',                        tipo:'pct_D10',    dflt:0.0567, showVar:true  },
+    { item:'B.4', nombre:'Enfermedad',                      tipo:'pct_D10',    dflt:0.0253, showVar:true  },
+    { item:'B.5', nombre:'Accidente',                       tipo:'pct_D10',    dflt:0.0189, showVar:true  },
+    { item:'B',   nombre:'SUB TOTAL 1',                     tipo:'sub',        subs:['B.1','B.2','B.3','B.4','B.5'], showVar:false },
+    { item:'C.1', nombre:'Aportes previsionales',           tipo:'pct_AB',     dflt:0.20,   showVar:true  },
+    { item:'C.2', nombre:'Obra social',                     tipo:'pct_A',      dflt:0.06,   showVar:true  },
+    { item:'C.3', nombre:'Seg. colectivo vida y SEP',       tipo:'pct_A',      dflt:0.0121, showVar:true  },
+    { item:'C.4', nombre:'A.R.T. fijo',                     tipo:'fijo_mens',  dflt:0,      showVar:false },
+    { item:'C.5', nombre:'A.R.T. variable',                 tipo:'pct_A',      dflt:0.08,   showVar:true  },
+    { item:'C.6', nombre:'Seguro de vida obligatorio',      tipo:'fijo_mens',  dflt:0,      showVar:false },
+    { item:'C',   nombre:'SUB TOTAL 2',                     tipo:'sub',        subs:['C.1','C.2','C.3','C.4','C.5','C.6'], showVar:false },
+    { item:'D.1', nombre:'Costo de despido',                tipo:'pct_AB_D',   dflt:0.12,   showVar:true  },
+    { item:'D.2', nombre:'IERIC',                           tipo:'pct_D1',     dflt:0.04,   showVar:true  },
+    { item:'D',   nombre:'SUB TOTAL 3',                     tipo:'sub',        subs:['D.1','D.2'], showVar:false },
+    { item:'E.1', nombre:'Gastos administrativos',          tipo:'fijo_gastos',dflt:800000, showVar:false, esMonto:true },
+    { item:'E',   nombre:'SUB TOTAL 4',                     tipo:'sub',        subs:['E.1'], showVar:false },
+    { item:'F',   nombre:'Improductivos',                   tipo:'pct_ABCDE',  dflt:0.01,   showVar:true  },
+    { item:'G',   nombre:'Impuesto a las ganancias',        tipo:'pct_D29',    dflt:0.01,   showVar:true  },
+    { item:'H',   nombre:'Impuestos munic + IIBB',          tipo:'pct_ABCDEF', dflt:0.01,   showVar:true  }
+  ];
 
-    // B: % sobre A hora (base = A)
-    var bVac = subA * pct('chh-vac');
-    var bSac = subA * pct('chh-sac');
-    var bFer = subA * pct('chh-fer');
-    var bEnf = subA * pct('chh-enf');
-    var bAcc = subA * pct('chh-acc');
-    var subB = bVac + bSac + bFer + bEnf + bAcc;
-    var Bh = Ah * (pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc'));
+  // Estado de variables y montos (mapa item → valor)
+  var CHH_VAR = {};
+  CHH_CONF.forEach(function(r){ CHH_VAR[r.item] = r.dflt; });
 
-    // C: % sobre A hora (base = A, NO A+B — igual que Excel)
-    var base_c = subA;
-    var cAp  = base_c * pct('chh-ap');
-    var cOs  = base_c * pct('chh-os');
-    var cSeg = base_c * pct('chh-seg');
-    var cArtF = val('chh-artf') / hmes;
-    var cArtV = base_c * pct('chh-artv');
-    var cSvid = val('chh-svid') / hmes;
-    var subC  = cAp + cOs + cSeg + cArtF + cArtV + cSvid;
-
-    // D.1: 12% sobre (A+B) — base A+B, NO A+B+C (igual que Excel)
-    // D.2 IERIC: 4% sobre D.1 solamente
-    var base_d = subA + subB;
-    var dDesp  = base_d * pct('chh-desp');
-    var dIeric = dDesp * pct('chh-ieric');
-    var subD   = dDesp + dIeric;
-
-    // E: gastos adm — base A+B+C+D
-    var base_e = subA + subB + subC + subD;
-    var eAdm   = base_e * pct('chh-adm');
-    var subE   = eAdm;
-
-    // F: % sobre (A+B+C+D+E) en horas
-    var Ah = basico * (1 + pct('chh-present'));
-    var Bh = Ah * (pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc'));
-    var Ch = Ah * (pct('chh-ap')+pct('chh-os')+pct('chh-seg')+pct('chh-artv')) + val('chh-artf')/hmes + val('chh-svid')/hmes;
-    var D1h = (Ah+Bh) * pct('chh-desp');
-    var D2h = D1h * pct('chh-ieric');
-    var Dh  = D1h + D2h;
-    var Eh  = (Ah+Bh+Ch+Dh) * pct('chh-adm');
-    var Fh  = (Ah+Bh+Ch+Dh+Eh) * pct('chh-util');  // F base = A+B+C+D+E
-    var Gh  = Fh * pct('chh-gan');                   // G base = F
-    // H: base mensual = (A+B+C+D+F)_mensual * % / 176
-    var Am  = basico * hmes * (1 + pct('chh-present'));
-    var Bm  = Am * (pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc'));
-    var Cm  = Am * (pct('chh-ap')+pct('chh-os')+pct('chh-seg')+pct('chh-artv')) + val('chh-artf') + val('chh-svid');
-    var D1m = (Am+Bm) * pct('chh-desp');
-    var D2m = D1m * pct('chh-ieric');
-    var Fm  = (Am+Bm+Cm+D1m+D2m) * pct('chh-util');
-    var Hh  = (Am+Bm+Cm+D1m+D2m+Fm) * pct('chh-mun') / 176;
-    var fUtil = Fh; var fGan = Gh; var fMun = Hh;
-    var subFH = Fh + Gh + Hh;
-
-    // Hora SIN adicionales (suma directa en horas — sin dividir por hmes)
-    var horaSin = Ah+Bh+Ch+Dh+Eh+Fh+Gh+Hh;
-
-    // Adicionales mensuales → por hora
-    var eppH  = val('chh-epp')  / hmes;
-    var zonaH = val('chh-zona') / hmes;
-    var comH  = val('chh-com')  / hmes;
-    var preoH = val('chh-preo') / hmes;
-    var copaH = val('chh-copa') / hmes;
-    var adicH = eppH + zonaH + comH + preoH + copaH;
-
-    var horaNormal = horaSin + adicH;
-    var hora50     = horaNormal * 1.5;
-    var hora100    = horaNormal * 2;
-    var horaNoch   = horaNormal * 1.13;
-
-    return {
-      subA: subA/hmes, subB: subB/hmes, subC: subC/hmes,
-      subD: subD/hmes, subE: subE/hmes, subFH: subFH/hmes,
-      horaSin: horaSin, adicH: adicH,
-      horaNormal: horaNormal, hora50: hora50,
-      hora100: hora100, horaNoch: horaNoch,
-      hmes: hmes
-    };
-  }
+  // Adicionales
+  var CHH_ADIC = [
+    { item:'I', nombre:'Indumentaria y EPP',      mens:200000, editable:true },
+    { item:'J', nombre:'Adicional UOCRA Zona A.', mens:100000, editable:true },
+    { item:'K', nombre:'Comidas UOCRA',           mens:null,   editable:false, calc:'comida' },
+    { item:'L', nombre:'Preocupacionales',        mens:150000, editable:true },
+    { item:'M', nombre:'Adicional UOCRA COPA',    mens:null,   editable:false, calc:'copa' }
+  ];
 
   function chhCalc() {
-    var basico = val('chh-basico');
-    var r = chhCalcHora(basico);
+    var basico = val('chh-basico') || 0;
+    var hmes   = val('chh-hmes')   || 189;
+    var ops    = val('chh-ops')    || 10;
+    var comida = val('chh-comida') || 10000;
+    var diasCom= val('chh-diascomida') || 21;
+    var copaPct= (val('chh-copa-pct') || 70) / 100;
+    var margen = val('chh-margen') || 1.4;
 
-    // Desglose
-    var d = document.getElementById('chh-desglose');
-    if (d) d.innerHTML = [
-      ['A · Básico + presentismo/h', r.subA],
-      ['B · Adic. salariales/h', r.subB],
-      ['C · Cargas sociales/h', r.subC],
-      ['D · Despido + IERIC/h', r.subD],
-      ['E · Gastos adm/h', r.subE],
-      ['F-H · Util. + impuestos/h', r.subFH],
-      ['<strong>Hora sin adicionales</strong>', r.horaSin],
-      ['Adicionales UOCRA/h', r.adicH],
-    ].map(function(row) {
-      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">'
-        + '<span>' + row[0] + '</span><span style="font-weight:600">' + $f(row[1]) + '</span></div>';
-    }).join('');
+    // Mapas de resultados
+    var M = {}, H = {};
 
-    // Resultado
+    // Helpers
+    function sumM(items){ var s=0; items.forEach(function(k){s+=M[k]||0;}); return s; }
+    function sumH(items){ var s=0; items.forEach(function(k){s+=H[k]||0;}); return s; }
+
+    CHH_CONF.forEach(function(r){
+      var v = CHH_VAR[r.item]; var m=0, h=0;
+      if (r.tipo === 'basico') {
+        m = basico * hmes;
+        h = basico;
+      } else if (r.tipo === 'pct_D8') {
+        m = (M['A.1']||0) * v;
+        h = m/hmes;  // Excel E9 = D9/C47 * D47; D47=1 → m/hmes
+      } else if (r.tipo === 'pct_D10') {
+        m = (M['A']||0) * v;
+        h = m/hmes;
+      } else if (r.tipo === 'pct_AB') {
+        // Excel C.1: (D8+D16+D9)*var = (A+B) mensual * var
+        m = ((M['A']||0) + (M['B']||0)) * v;
+        h = m/hmes;
+      } else if (r.tipo === 'pct_A') {
+        m = (M['A']||0) * v;
+        h = m/hmes;
+      } else if (r.tipo === 'fijo_mens') {
+        m = v;  // var guarda el monto fijo (ej: ART fijo)
+        h = m/hmes;
+      } else if (r.tipo === 'pct_AB_D') {
+        // D.1 = (A+B)*var, hora mensual / hmes
+        m = ((M['A']||0) + (M['B']||0)) * v;
+        h = ((H['A']||0) + (H['B']||0)) * v;  // Excel: (E10+E16)*C24
+      } else if (r.tipo === 'pct_D1') {
+        m = (M['D.1']||0) * v;
+        h = (H['D.1']||0) * v;  // Excel E25 = C25*E24
+      } else if (r.tipo === 'fijo_gastos') {
+        m = v;  // monto fijo (800000)
+        h = (m/hmes)/ops;
+      } else if (r.tipo === 'pct_ABCDE') {
+        m = ((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0)) * v;
+        h = ((H['A']||0)+(H['B']||0)+(H['C']||0)+(H['D']||0)+(H['E']||0)) * v;
+      } else if (r.tipo === 'pct_D29') {
+        // G = D29 * var (ganancias); hora = m/hmes (Excel E30=D30/C47)
+        m = (M['F']||0) * v;
+        h = m/hmes;
+      } else if (r.tipo === 'pct_ABCDEF') {
+        // H = (A+B+C+D+E+F)*var; hora = mensual/176 (Excel fijo /176)
+        m = ((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0)+(M['F']||0)) * v;
+        h = m/176;
+      } else if (r.tipo === 'sub') {
+        m = sumM(r.subs);
+        h = sumH(r.subs);
+      }
+      M[r.item] = m;
+      H[r.item] = h;
+    });
+
+    // Adicionales
+    var adic_m = {}, adic_h = {};
+    CHH_ADIC.forEach(function(ad){
+      var m;
+      if (ad.calc === 'comida') m = diasCom * comida;
+      else if (ad.calc === 'copa') m = basico * copaPct * hmes;  // D39 = E39*C47 = (C8*0.7)*C47
+      else m = ad.mens;
+      adic_m[ad.item] = m;
+      adic_h[ad.item] = m/hmes;
+    });
+
+    // ── Render tabla principal ──
+    var tb = document.getElementById('chh-tbody');
+    if (tb) {
+      tb.innerHTML = CHH_CONF.map(function(r){
+        var esSub = r.tipo === 'sub';
+        var esFijoMens = r.tipo === 'fijo_mens';
+        var esFijoGastos = r.tipo === 'fijo_gastos';
+        var varTxt = '';
+        if (!esSub) {
+          if (esFijoGastos) {
+            varTxt = '<input type="number" value="'+CHH_VAR[r.item]+'" step="10000" style="width:110px;text-align:right;font-size:12px" oninput="CHH_VAR[\''+r.item+'\']=parseFloat(this.value)||0;chhCalc()">';
+          } else if (esFijoMens) {
+            varTxt = '<input type="number" value="'+CHH_VAR[r.item]+'" step="1000" style="width:100px;text-align:right;font-size:12px" oninput="CHH_VAR[\''+r.item+'\']=parseFloat(this.value)||0;chhCalc()">';
+          } else if (r.showVar) {
+            varTxt = '<input type="number" value="'+(CHH_VAR[r.item]*100).toFixed(4)+'" step="0.01" style="width:72px;text-align:right;font-size:12px" oninput="CHH_VAR[\''+r.item+'\']=(parseFloat(this.value)||0)/100;chhCalc()"><span style="color:var(--txm);font-size:11px"> %</span>';
+          }
+        }
+        var style = esSub ? 'background:var(--bg2);font-weight:700;' : '';
+        return '<tr style="'+style+'">'
+          +'<td style="font-size:12px;color:var(--txm);font-weight:600">'+r.item+'</td>'
+          +'<td>'+r.nombre+'</td>'
+          +'<td style="text-align:right">'+varTxt+'</td>'
+          +'<td style="text-align:right'+(esSub?';color:var(--red2)':'')+'">'+$f(M[r.item])+'</td>'
+          +'<td style="text-align:right'+(esSub?';color:var(--green)':'')+';font-weight:'+(esSub?'700':'500')+'">'+$f(H[r.item])+'</td>'
+          +'</tr>';
+      }).join('')
+      + '<tr style="background:rgba(239,68,68,.1);font-weight:700;border-top:2px solid var(--red2)">'
+        +'<td></td>'
+        +'<td style="color:var(--red2)">POR HORA SIN EPP</td>'
+        +'<td></td>'
+        +'<td></td>'
+        +'<td style="text-align:right;color:var(--red2);font-size:14px">'+$f(H['A']+H['B']+H['C']+H['D']+H['E']+H['F']+H['G']+H['H'])+'</td>'
+      +'</tr>';
+    }
+
+    // ── Render tabla adicionales ──
+    var adtb = document.getElementById('chh-adic-tbody');
+    if (adtb) {
+      adtb.innerHTML = CHH_ADIC.map(function(ad){
+        var mVal = adic_m[ad.item];
+        var hVal = adic_h[ad.item];
+        var mTxt = ad.editable
+          ? '<input type="number" value="'+ad.mens+'" step="10000" style="width:120px;text-align:right;font-size:12px" oninput="CHH_ADIC.find(function(x){return x.item==\''+ad.item+'\'}).mens=parseFloat(this.value)||0;chhCalc()">'
+          : $f(mVal);
+        return '<tr>'
+          +'<td style="font-size:12px;color:var(--txm);font-weight:600">'+ad.item+'</td>'
+          +'<td>'+ad.nombre+'</td>'
+          +'<td style="text-align:right">'+mTxt+'</td>'
+          +'<td style="text-align:right;font-weight:600">'+$f(hVal)+'</td>'
+          +'</tr>';
+      }).join('');
+    }
+
+    // ── Totales ──
+    var horaSinEPP = H['A']+H['B']+H['C']+H['D']+H['E']+H['F']+H['G']+H['H'];
+    var adicSum    = adic_h['I']+adic_h['J']+adic_h['K']+adic_h['L']+adic_h['M'];
+    var horaTotal  = horaSinEPP + adicSum;
+    var horaMargen = horaTotal * margen;
+    var jornalH    = 9;
+    var jornal     = horaMargen * jornalH;
+
+    // ── Resultado ──
     var res = document.getElementById('chh-resultado');
     if (res) res.innerHTML =
-      '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="font-size:13px">Hora normal</span><span style="font-size:22px;font-weight:800;color:var(--red2)">' + $f(r.horaNormal) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora 50%</span><span style="font-weight:700">' + $f(r.hora50) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora 100%</span><span style="font-weight:700">' + $f(r.hora100) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Hora nocturna</span><span style="font-weight:700">' + $f(r.horaNoch) + '</span></div>' +
-      '<div style="border-top:1px solid var(--br2);margin-top:10px;padding-top:10px;display:flex;justify-content:space-between"><span style="font-size:13px">Jornal ' + r.hmes/176*9 + 'hs</span><span style="font-weight:700">' + $f(r.horaNormal * (r.hmes/176*9)) + '</span></div>';
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Hora sin EPP</span><span style="font-weight:600">'+$f(horaSinEPP)+'</span></div>'
+     +'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Adicionales /h</span><span style="font-weight:600">'+$f(adicSum)+'</span></div>'
+     +'<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px;font-weight:700">Hora total</span><span style="font-weight:700">'+$f(horaTotal)+'</span></div>'
+     +'<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:2px solid var(--red2);margin-bottom:6px"><span style="font-size:14px;font-weight:700">Hora × margen ('+margen+')</span><span style="font-size:22px;font-weight:800;color:var(--red2)">'+$f(horaMargen)+'</span></div>'
+     +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>Jornal '+jornalH+'hs</span><span style="font-weight:600">'+$f(jornal)+'</span></div>'
+     +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>Mensual (21 jornales)</span><span style="font-weight:600">'+$f(jornal*21)+'</span></div>';
 
-    // Actualizar tabla de categorías
-    chhRenderCats();
-    // Actualizar obra si está visible
-    chhObraCalc();
+    var mi = document.getElementById('chh-margen-info');
+    if (mi) mi.innerHTML = 'Aplicado sobre hora total <strong>'+$f(horaTotal)+'</strong>';
 
-    // Actualizar valores $ debajo de cada %
-    var basico2  = val('chh-basico');
-    var hmes2    = val('chh-hmes') || 189;
-    var bMes2    = basico2 * hmes2;
-    var present2 = bMes2 * pct('chh-present');
-    var subA2    = bMes2 + present2;
-    var subB2    = subA2 * (pct('chh-vac')+pct('chh-sac')+pct('chh-fer')+pct('chh-enf')+pct('chh-acc'));
-    var base_c2  = subA2; // C sobre A solamente (igual que Excel)
-    var subC2    = base_c2*(pct('chh-ap')+pct('chh-os')+pct('chh-seg')+pct('chh-artv')) + val('chh-artf') + val('chh-svid');
-    var base_d2  = subA2 + subB2 + subC2;
-    var dDesp2   = base_d2 * pct('chh-desp');
-    var dIeric2  = dDesp2 * pct('chh-ieric'); // IERIC = 4% de D.1 (igual que Excel)
-    var base_e2  = base_d2 + dDesp2 + dIeric2;
-    var eAdm2    = base_e2 * pct('chh-adm');
-    var base_f2  = base_e2 + eAdm2;
-    function sv(id,v){var e=document.getElementById(id);if(e)e.textContent=$f(v);}
-    sv('chh-v-vac',  subA2 * pct('chh-vac'));
-    sv('chh-v-sac',  subA2 * pct('chh-sac'));
-    sv('chh-v-fer',  subA2 * pct('chh-fer'));
-    sv('chh-v-enf',  subA2 * pct('chh-enf'));
-    sv('chh-v-acc',  subA2 * pct('chh-acc'));
-    sv('chh-v-ap',   base_c2 * pct('chh-ap'));
-    sv('chh-v-os',   base_c2 * pct('chh-os'));
-    sv('chh-v-seg',  base_c2 * pct('chh-seg'));
-    sv('chh-v-artv', base_c2 * pct('chh-artv'));
-    sv('chh-v-desp', dDesp2);
-    sv('chh-v-ieric',dIeric2);
-    sv('chh-v-adm',  eAdm2);
-    sv('chh-v-util', base_f2 * pct('chh-util'));
-    sv('chh-v-gan',  base_f2 * pct('chh-gan'));
-    sv('chh-v-mun',  base_f2 * pct('chh-mun'));
+    // Mantener compatibilidad con el resto del módulo (categorías/obra)
+    if (typeof chhRenderCats === 'function') chhRenderCats();
+    if (typeof chhObraCalc === 'function') chhObraCalc();
+  }
+
+  // chhCalcHora: función legacy para categorías/obra — calcula con el mismo motor
+  function chhCalcHora(basico) {
+    var bakBasico = val('chh-basico');
+    var inp = document.getElementById('chh-basico');
+    if (inp) inp.value = basico;
+    chhCalc();
+    var hmes = val('chh-hmes') || 189;
+    // Leer valores recién calculados desde el resultado
+    // Recalcular los totales acá sin depender del DOM
+    var ops = val('chh-ops') || 10;
+    var comida = val('chh-comida') || 10000;
+    var diasCom = val('chh-diascomida') || 21;
+    var copaPct = (val('chh-copa-pct') || 70) / 100;
+    var margen = val('chh-margen') || 1.4;
+    var M = {}, H = {};
+    CHH_CONF.forEach(function(r){
+      var v = CHH_VAR[r.item]; var m=0, h=0;
+      if (r.tipo==='basico'){m=basico*hmes;h=basico;}
+      else if (r.tipo==='pct_D8'){m=(M['A.1']||0)*v;h=m/hmes;}
+      else if (r.tipo==='pct_D10'){m=(M['A']||0)*v;h=m/hmes;}
+      else if (r.tipo==='pct_AB'){m=((M['A']||0)+(M['B']||0))*v;h=m/hmes;}
+      else if (r.tipo==='pct_A'){m=(M['A']||0)*v;h=m/hmes;}
+      else if (r.tipo==='fijo_mens'){m=v;h=m/hmes;}
+      else if (r.tipo==='pct_AB_D'){m=((M['A']||0)+(M['B']||0))*v;h=((H['A']||0)+(H['B']||0))*v;}
+      else if (r.tipo==='pct_D1'){m=(M['D.1']||0)*v;h=(H['D.1']||0)*v;}
+      else if (r.tipo==='fijo_gastos'){m=v;h=(m/hmes)/ops;}
+      else if (r.tipo==='pct_ABCDE'){m=((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0))*v;h=((H['A']||0)+(H['B']||0)+(H['C']||0)+(H['D']||0)+(H['E']||0))*v;}
+      else if (r.tipo==='pct_D29'){m=(M['F']||0)*v;h=m/hmes;}
+      else if (r.tipo==='pct_ABCDEF'){m=((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0)+(M['F']||0))*v;h=m/176;}
+      else if (r.tipo==='sub'){var s1=0,s2=0;r.subs.forEach(function(k){s1+=M[k]||0;s2+=H[k]||0;});m=s1;h=s2;}
+      M[r.item]=m; H[r.item]=h;
+    });
+    var mI=200000,mJ=100000,mK=diasCom*comida,mL=150000,mM=basico*copaPct*hmes;
+    var adicH=(mI+mJ+mK+mL+mM)/hmes;
+    var horaSin=H['A']+H['B']+H['C']+H['D']+H['E']+H['F']+H['G']+H['H'];
+    var horaNormal = (horaSin+adicH)*margen;
+    if (inp) inp.value = bakBasico;  // restaurar
+    return {
+      subA:H['A'], subB:H['B'], subC:H['C'], subD:H['D'], subE:H['E'], subFH:H['F']+H['G']+H['H'],
+      horaSin:horaSin, adicH:adicH,
+      horaNormal:horaNormal,
+      hora50:horaNormal*1.5, hora100:horaNormal*2, horaNoch:horaNormal*1.13,
+      hmes:hmes
+    };
   }
   window.chhCalc = chhCalc;
 
@@ -3880,88 +3985,89 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <!-- SUB: CALCULO DE HORA -->
   <div id="chh-calc" class="sp on">
-    <div class="two" style="align-items:start">
-
-      <!-- COLUMNA IZQ: Inputs -->
-      <div>
-        <!-- BLOQUE A: BÁSICO -->
-        <div class="card" style="margin-bottom:14px">
-          <div class="sttl">A · Sueldo básico</div>
-          <div class="fr" style="margin-top:8px">
-            <div class="fg"><label>Básico hora (ARS)</label><input type="number" id="chh-basico" value="7274" min="0" oninput="chhCalc()"></div>
-            <div class="fg"><label>Presentismo (%)</label><input type="number" id="chh-present" value="20" min="0" step="0.1" oninput="chhCalc()"></div>
-            <div class="fg"><label>Horas/mes</label><input type="number" id="chh-hmes" value="189" min="1" oninput="chhCalc()"></div>
-          </div>
+    <div class="card" style="margin-bottom:14px;border-top:3px solid var(--red2)">
+      <div class="sttl">Cálculo Valor Hora — Apertura de Costos</div>
+      <p style="font-size:12px;color:var(--txm);margin:4px 0 12px">Replica exacta del Excel. Editá el básico y los porcentajes para ver el impacto en tiempo real.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fg" style="max-width:180px">
+          <label style="color:var(--red2);font-weight:700">★ Sueldo Básico (variable)</label>
+          <input type="number" id="chh-basico" value="5142" step="0.01" oninput="chhCalc()" style="border:2px solid var(--red2);font-weight:700;font-size:14px">
         </div>
-
-        <!-- BLOQUE B: ADICIONALES SALARIALES -->
-        <div class="card" style="margin-bottom:14px">
-          <div class="sttl">B · Adicionales salariales (%)</div>
-          <div class="fr" style="margin-top:8px">
-            <div class="fg"><label>Vacaciones</label><input type="number" id="chh-vac" value="5.3" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-vac" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>SAC</label><input type="number" id="chh-sac" value="8.33" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-sac" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Feriados</label><input type="number" id="chh-fer" value="5.67" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-fer" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Enfermedad</label><input type="number" id="chh-enf" value="2.53" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-enf" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Accidente</label><input type="number" id="chh-acc" value="1.89" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-acc" style="font-size:11px;color:var(--txm)">$0</span></div>
-          </div>
+        <div class="fg" style="max-width:120px">
+          <label>Horas mensuales</label>
+          <input type="number" id="chh-hmes" value="189" step="1" oninput="chhCalc()">
         </div>
-
-        <!-- BLOQUE C: CARGAS SOCIALES -->
-        <div class="card" style="margin-bottom:14px">
-          <div class="sttl">C · Cargas sociales (%)</div>
-          <div class="fr" style="margin-top:8px">
-            <div class="fg"><label>Aportes previsionales</label><input type="number" id="chh-ap" value="20" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-ap" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Obra social</label><input type="number" id="chh-os" value="6" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-os" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Seg. colectivo/SEP</label><input type="number" id="chh-seg" value="1.21" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-seg" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>ART fijo (mensual)</label><input type="number" id="chh-artf" value="0" min="0" oninput="chhCalc()"></div>
-            <div class="fg"><label>ART variable</label><input type="number" id="chh-artv" value="6" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-artv" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Seg. vida obligatorio</label><input type="number" id="chh-svid" value="0" min="0" oninput="chhCalc()"></div>
-          </div>
-        </div>
-
-        <!-- BLOQUE D: DESPIDO / IERIC -->
-        <div class="card" style="margin-bottom:14px">
-          <div class="sttl">D · Indemnización / IERIC (%)</div>
-          <div class="fr" style="margin-top:8px">
-            <div class="fg"><label>Costo despido</label><input type="number" id="chh-desp" value="12" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-desp" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>IERIC</label><input type="number" id="chh-ieric" value="4" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-ieric" style="font-size:11px;color:var(--txm)">$0</span></div>
-          </div>
-        </div>
-
-        <!-- BLOQUE E-H: GASTOS / IMPUESTOS -->
-        <div class="card" style="margin-bottom:14px">
-          <div class="sttl">E-H · Gastos e impuestos (%)</div>
-          <div class="fr" style="margin-top:8px">
-            <div class="fg"><label>Gastos administrativos</label><input type="number" id="chh-adm" value="0" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-adm" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Utilidad bruta</label><input type="number" id="chh-util" value="2" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-util" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Ganancias</label><input type="number" id="chh-gan" value="1" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-gan" style="font-size:11px;color:var(--txm)">$0</span></div>
-            <div class="fg"><label>Municipales / Ing. brutos</label><input type="number" id="chh-mun" value="1" step="0.01" oninput="chhCalc()">%<br><span id="chh-v-mun" style="font-size:11px;color:var(--txm)">$0</span></div>
-          </div>
-        </div>
-
-        <!-- BLOQUE ADICIONALES UOCRA (mensuales) -->
-        <div class="card" style="margin-bottom:14px">
-          <div class="sttl">Adicionales UOCRA (mensuales ARS)</div>
-          <div class="fr" style="margin-top:8px">
-            <div class="fg"><label>Indumentaria / EPP</label><input type="number" id="chh-epp" value="100000" min="0" oninput="chhCalc()"></div>
-            <div class="fg"><label>Adicional zona A</label><input type="number" id="chh-zona" value="50000" min="0" oninput="chhCalc()"></div>
-            <div class="fg"><label>Comidas UOCRA</label><input type="number" id="chh-com" value="178500" min="0" oninput="chhCalc()"></div>
-            <div class="fg"><label>Preocupacionales</label><input type="number" id="chh-preo" value="100000" min="0" oninput="chhCalc()"></div>
-            <div class="fg"><label>Adicional COPA</label><input type="number" id="chh-copa" value="100000" min="0" oninput="chhCalc()"></div>
-          </div>
+        <div class="fg" style="max-width:120px">
+          <label>Operadores</label>
+          <input type="number" id="chh-ops" value="10" step="1" min="1" oninput="chhCalc()">
         </div>
       </div>
+    </div>
 
-      <!-- COLUMNA DER: Resultados -->
-      <div>
-        <div class="card" style="margin-bottom:14px">
-          <div class="sttl">Desglose de costo / hora</div>
-          <div id="chh-desglose" style="font-size:13px"></div>
+    <!-- TABLA PRINCIPAL -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="overflow-x:auto">
+        <table style="font-size:13px;min-width:640px;width:100%">
+          <thead>
+            <tr style="background:var(--bg2)">
+              <th style="width:55px">ITEM</th>
+              <th>CONCEPTO</th>
+              <th style="text-align:right;width:100px">VARIABLE</th>
+              <th style="text-align:right;width:140px">MENSUAL</th>
+              <th style="text-align:right;width:130px">COSTO HORA</th>
+            </tr>
+          </thead>
+          <tbody id="chh-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ADICIONALES -->
+    <div class="card" style="margin-bottom:14px;border-top:3px solid var(--blu)">
+      <div class="sttl">Adicionales — monto mensual ÷ horas/mes</div>
+      <div style="overflow-x:auto;margin-top:10px">
+        <table style="font-size:13px;min-width:580px;width:100%">
+          <thead>
+            <tr style="background:var(--bg2)">
+              <th style="width:55px">ITEM</th>
+              <th>CONCEPTO</th>
+              <th style="text-align:right;width:160px">MENSUAL</th>
+              <th style="text-align:right;width:130px">COSTO HORA</th>
+            </tr>
+          </thead>
+          <tbody id="chh-adic-tbody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fg" style="max-width:140px">
+          <label>Precio comida ($)</label>
+          <input type="number" id="chh-comida" value="10000" step="500" oninput="chhCalc()">
         </div>
-        <div class="card" style="background:var(--redd);border:2px solid var(--red2)">
-          <div class="sttl" style="color:var(--red2)">Valor de hora</div>
-          <div id="chh-resultado" style="margin-top:8px"></div>
+        <div class="fg" style="max-width:140px">
+          <label>Días/mes comida</label>
+          <input type="number" id="chh-diascomida" value="21" step="1" oninput="chhCalc()">
         </div>
+        <div class="fg" style="max-width:160px">
+          <label>COPA (% del básico)</label>
+          <input type="number" id="chh-copa-pct" value="70" step="1" oninput="chhCalc()">
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTADO + MARGEN -->
+    <div class="two" style="gap:14px;align-items:start">
+      <div class="card" style="border-top:3px solid var(--green)">
+        <div class="sttl">Margen</div>
+        <p style="font-size:11px;color:var(--txm);margin:3px 0 10px">Multiplicador sobre la hora total.</p>
+        <div class="fg" style="max-width:150px">
+          <label>Margen (x)</label>
+          <input type="number" id="chh-margen" value="1.4" step="0.05" min="1" oninput="chhCalc()" style="font-size:15px;font-weight:700">
+        </div>
+        <div id="chh-margen-info" style="font-size:12px;color:var(--txm);margin-top:8px"></div>
+      </div>
+      <div class="card" style="background:var(--redd);border:2px solid var(--red2)">
+        <div class="sttl" style="color:var(--red2)">Valor de hora final</div>
+        <div id="chh-resultado" style="margin-top:10px"></div>
       </div>
     </div>
   </div>
