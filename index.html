@@ -2841,7 +2841,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
-    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){uocraRenderTabla();chRecalcAll();if(typeof chRenderEmpresas==='function')chRenderEmpresas();},60);return;}
+    if(t.dataset&&t.dataset.tab==='calchora'){return;} if(t.dataset&&t.dataset.tab==='costohh'){setTimeout(function(){if(typeof chhCalc==='function')chhCalc();if(typeof chhRenderCats==='function')chhRenderCats();},60);return;}
     if(t.dataset&&t.dataset.tab==='horas'){setTimeout(function(){horasCargar();},60);return;}
     if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
@@ -3528,21 +3528,48 @@ document.addEventListener('DOMContentLoaded', function() {
             varTxt = '<input type="number" value="'+(CHH_VAR[r.item]*100).toFixed(4)+'" step="0.01" style="width:72px;text-align:right;font-size:12px" oninput="CHH_VAR[\''+r.item+'\']=(parseFloat(this.value)||0)/100;chhCalc()"><span style="color:var(--txm);font-size:11px"> %</span>';
           }
         }
+        // Calcular h50, h100, noche para cada fila
+        var ch = H[r.item] || 0;
+        var h50val=0, h100val=0, nocheVal=0;
+        if (!esSub) {
+          if (r.tipo === 'basico') {
+            var bas = CHH_VAR['A.1'] || 0;
+            h50val   = bas * 1.5;
+            h100val  = bas * 2;
+            nocheVal = bas * 0.13;
+          } else if (r.tipo !== 'sub' && r.tipo !== 'fijo_mens' && r.tipo !== 'fijo_gastos') {
+            h50val  = ch * 1.25;
+            h100val = ch * (5/3);
+            nocheVal = (r.tipo === 'pct_D8') ? 0 : ch * 0.13;
+          }
+        } else {
+          // subtotal: sumar h50/h100/noche de sus hijos
+          (r.subs||[]).forEach(function(k){
+            var c2 = H[k]||0;
+            if (k==='A.1'){ var bas=CHH_VAR['A.1']||0; h50val+=bas*1.5; h100val+=bas*2; nocheVal+=bas*0.13; }
+            else if (k==='A.2'){ /* nada */ }
+            else { h50val+=c2*1.25; h100val+=c2*(5/3); nocheVal+=c2*0.13; }
+          });
+        }
         var style = esSub ? 'background:var(--bg2);font-weight:700;' : '';
+        var fmtSub = function(v){ return v ? $f(v) : ''; };
         return '<tr style="'+style+'">'
           +'<td style="font-size:12px;color:var(--txm);font-weight:600">'+r.item+'</td>'
           +'<td>'+r.nombre+'</td>'
           +'<td style="text-align:right">'+varTxt+'</td>'
           +'<td style="text-align:right'+(esSub?';color:var(--red2)':'')+'">'+$f(M[r.item])+'</td>'
           +'<td style="text-align:right'+(esSub?';color:var(--green)':'')+';font-weight:'+(esSub?'700':'500')+'">'+$f(H[r.item])+'</td>'
+          +'<td style="text-align:right;color:#0891b2">'+fmtSub(h50val)+'</td>'
+          +'<td style="text-align:right;color:#7c3aed">'+fmtSub(h100val)+'</td>'
+          +'<td style="text-align:right;color:#b45309">'+fmtSub(nocheVal)+'</td>'
           +'</tr>';
       }).join('')
       + '<tr style="background:rgba(239,68,68,.1);font-weight:700;border-top:2px solid var(--red2)">'
         +'<td></td>'
         +'<td style="color:var(--red2)">POR HORA SIN EPP</td>'
-        +'<td></td>'
-        +'<td></td>'
+        +'<td></td><td></td>'
         +'<td style="text-align:right;color:var(--red2);font-size:14px">'+$f(H['A']+H['B']+H['C']+H['D']+H['E']+H['F']+H['G']+H['H'])+'</td>'
+        +'<td></td><td></td><td></td>'
       +'</tr>';
     }
 
@@ -4013,8 +4040,11 @@ document.addEventListener('DOMContentLoaded', function() {
               <th style="width:55px">ITEM</th>
               <th>CONCEPTO</th>
               <th style="text-align:right;width:100px">VARIABLE</th>
-              <th style="text-align:right;width:140px">MENSUAL</th>
-              <th style="text-align:right;width:130px">COSTO HORA</th>
+              <th style="text-align:right;width:130px">MENSUAL</th>
+              <th style="text-align:right;width:110px">COSTO HORA</th>
+              <th style="text-align:right;width:110px">HORA 50%</th>
+              <th style="text-align:right;width:110px">HORA 100%</th>
+              <th style="text-align:right;width:100px">NOCHE 13%</th>
             </tr>
           </thead>
           <tbody id="chh-tbody"></tbody>
