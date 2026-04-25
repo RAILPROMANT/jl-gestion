@@ -1181,17 +1181,16 @@ var UOCRA = [
 function chParams() {
   function n(id, def) { return parseFloat((el(id)||{}).value) || def; }
   return {
-    basico : n('ch-hb',    7274),   // básico referencia (para el cálculo propio)
-    hMens  : n('ch-horas-mens', 176),  // horas mensuales (176 conv. normal, 189 agro)
-    dsem   : n('ch-dsem',  180),    // días por semestre (rev. médica)
-    hd     : n('ch-hd',    9),      // horas diarias
-    rm     : n('ch-rm',    300000), // revisión médica mensual $
-    epp    : n('ch-epp',   568.18), // EPP y ropa ($/h)
-    uocraZona : n('ch-zona', 284.09),  // adicional UOCRA zona A ($/h)
-    comidas   : n('ch-comidas', 1014.20), // comidas UOCRA ($/h)
-    preocup   : n('ch-preocup', 568.18), // preocupacionales ($/h)
-    ganPct : n('ch-gan-pct', 0),    // % ganancia (puede ser 0)
-    extraPct: n('ch-extra-pct', 0) // % extra sobre hora (ej: 40)
+    hMens  : n('ch-horas-mens', 176),
+    dsem   : n('ch-dsem',  180),
+    hd     : n('ch-hd',    9),
+    rm     : n('ch-rm',    300000),
+    epp    : n('ch-epp',   568.18),
+    uocraZona : n('ch-zona', 284.09),
+    comidas   : n('ch-comidas', 1014.20),
+    preocup   : n('ch-preocup', 568.18),
+    ganPct : n('ch-gan-pct', 0),
+    extraPct: n('ch-extra-pct', 0)
   };
 }
 
@@ -1521,7 +1520,7 @@ function chRenderEmpresas() {
 }
 
 function chCalcular() {
-  var hb    = parseFloat(el('ch-hb').value) || 5470;
+  var hb = (UOCRA[0] && UOCRA[0].basico) ? UOCRA[0].basico : 7274;
   var cs    = (parseFloat(el('ch-cs').value) || 45) / 100;
   var dias  = parseFloat(el('ch-dias').value) || 22;
   var hd    = parseFloat(el('ch-hd').value) || 9;
@@ -2841,7 +2840,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
-    if(t.dataset&&t.dataset.tab==='calchora'){return;} if(t.dataset&&t.dataset.tab==='costohh'){setTimeout(function(){if(typeof chhCalc==='function')chhCalc();if(typeof chhRenderCats==='function')chhRenderCats();},60);return;}
+    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){uocraRenderTabla();chRecalcAll();},60);return;} if(t.dataset&&t.dataset.tab==='costohh'){setTimeout(function(){if(typeof chhCalc==='function')chhCalc();if(typeof chhRenderCats==='function')chhRenderCats();},60);return;}
     if(t.dataset&&t.dataset.tab==='horas'){setTimeout(function(){horasCargar();},60);return;}
     if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
@@ -3137,7 +3136,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Calculo Hora - recalcular al cambiar cualquier campo
-  var chInputIds = ['ch-hb','ch-cs','ch-dias','ch-hd','ch-dsem','ch-rm','ch-pres','ch-fd','ch-pd','ch-agui','ch-epp','ch-vianda','ch-agua'];
+  var chInputIds = ['ch-horas-mens','ch-hd','ch-dsem','ch-rm','ch-epp','ch-zona','ch-comidas','ch-preocup','ch-gan-pct','ch-extra-pct'];
   chInputIds.forEach(function(id) {
     var e = el(id);
     if (e) e.addEventListener('input', function() { chRecalcAll(); });
