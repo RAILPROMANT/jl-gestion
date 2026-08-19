@@ -3345,547 +3345,324 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ═══════════════════════════════════════════════════════
-// COSTO HH — Cálculo de hora hombre (basado en Excel JL)
+// ═══════════════════════════════════════════════════════
+// COSTO HH — fórmulas exactas del Excel JL
 // ═══════════════════════════════════════════════════════
 (function() {
 
-  // Estado local — categorías UOCRA y operarios de obra
   var CHH = {
     cats: [
-      { id: 'of-esp', nombre: 'Oficial especializado', basico: 8500 },
-      { id: 'oficial', nombre: 'Oficial', basico: 7274 },
-      { id: 'med-of', nombre: 'Medio oficial', basico: 6500 },
-      { id: 'ayud', nombre: 'Ayudante', basico: 5800 }
+      { id: 'of-esp',  nombre: 'Oficial especializado', basico: 9500 },
+      { id: 'oficial', nombre: 'Oficial',               basico: 7954.3 },
+      { id: 'med-of',  nombre: 'Medio oficial',         basico: 7000 },
+      { id: 'ayud',    nombre: 'Ayudante',              basico: 5800 }
     ],
-    obraOps: [],   // operarios en obra: { catId, cantidad }
-    obraCostos: [] // otros costos: { concepto, importe, iva }
+    adicMens: { J: 100000, L: 50000, N: 300000 },
+    obraOps: [],
+    obraCostos: []
   };
-
-  // Guardar/cargar CHH en localStorage
-  function chhSv() {
-    try { localStorage.setItem('jl_chh', JSON.stringify(CHH)); } catch(e) {}
-  }
+  function chhSv() { try { localStorage.setItem('jl_chh2', JSON.stringify(CHH)); } catch(e) {} }
   function chhLoad() {
     try {
-      var d = JSON.parse(localStorage.getItem('jl_chh') || '{}');
+      var d = JSON.parse(localStorage.getItem('jl_chh2') || 'null');
+      if (!d) return;
       if (d.cats && d.cats.length) CHH.cats = d.cats;
-      if (d.obraOps) CHH.obraOps = d.obraOps;
+      if (d.adicMens) CHH.adicMens = d.adicMens;
+      if (d.obraOps)    CHH.obraOps    = d.obraOps;
       if (d.obraCostos) CHH.obraCostos = d.obraCostos;
     } catch(e) {}
   }
   chhLoad();
 
-  var $f = window.$f || function(n){ return '$' + Math.round(n).toLocaleString('es-AR'); };
-  function pct(id) { return (parseFloat(document.getElementById(id).value) || 0) / 100; }
-  function val(id) { return parseFloat(document.getElementById(id).value) || 0; }
+  var $f = window.$f || function(n){ return '$ ' + Math.round(n).toLocaleString('es-AR'); };
+  function val(id) { var e = document.getElementById(id); return e ? (parseFloat(e.value) || 0) : 0; }
 
-  // ── CÁLCULO HORA HOMBRE ──────────────────────────────
-  // ── DATOS de la tabla CHH_DATA ──
-  // Fila del Excel → config (ITEM, CONCEPTO, tipo, variable default, base mensual)
-  // Tipos de base (cómo calcula mensual y hora):
-  //   basico:        C8 * hmes (A.1)
-  //   pct_D8:        D8 * var (A.2 presentismo)
-  //   subtotal:      suma de ítems hijos
-  //   pct_D10:       D10 (A) * var  (B.1 a B.5)
-  //   pct_AB:        (D8+D9+D16) = D10+D16 ← usa para C.1 "APORTES"
-  //                  Excel: C.1 = (D8+D16+D9)*C17 = (A+B)*C17
-  //   pct_A:         (D8+D9) * var (C.2, C.3, C.5)
-  //   fijo_mens:     monto fijo mensual
-  //   pct_AB_D:      D.1 = (A+B) * var, D.2 = D1*var (IERIC)
-  //   pct_D1:        D.2 IERIC = D1 * var
-  //   fijo_gastos:   E.1 = 800000, hora = (800k/hmes)/ops
-  //   pct_ABCDE:     F = (A+B+C+D+E) * var
-  //   pct_D29:       G = D29 * var (ganancias)
-  //   pct_ABCDEF:    H = (A+B+C+D+E+F) * var, hora = mensual/176 (NO hmes)
-
-  var CHH_CONF = [
-    { item:'A.1', nombre:'Sueldo básico',                   tipo:'basico',     dflt:0.00,   showVar:false },
-    { item:'A.2', nombre:'Presentismo',                     tipo:'pct_D8',     dflt:0.20,   showVar:true  },
-    { item:'A',   nombre:'BÁSICO',                          tipo:'sub',        subs:['A.1','A.2'], showVar:false },
-    { item:'B.1', nombre:'Vacaciones',                      tipo:'pct_D10',    dflt:0.053,  showVar:true  },
-    { item:'B.2', nombre:'SAC',                             tipo:'pct_D10',    dflt:0.0833, showVar:true  },
-    { item:'B.3', nombre:'Feriados',                        tipo:'pct_D10',    dflt:0.0567, showVar:true  },
-    { item:'B.4', nombre:'Enfermedad',                      tipo:'pct_D10',    dflt:0.0253, showVar:true  },
-    { item:'B.5', nombre:'Accidente',                       tipo:'pct_D10',    dflt:0.0189, showVar:true  },
-    { item:'B',   nombre:'SUB TOTAL 1',                     tipo:'sub',        subs:['B.1','B.2','B.3','B.4','B.5'], showVar:false },
-    { item:'C.1', nombre:'Aportes previsionales',           tipo:'pct_AB',     dflt:0.20,   showVar:true  },
-    { item:'C.2', nombre:'Obra social',                     tipo:'pct_A',      dflt:0.06,   showVar:true  },
-    { item:'C.3', nombre:'Seg. colectivo vida y SEP',       tipo:'pct_A',      dflt:0.0121, showVar:true  },
-    { item:'C.4', nombre:'A.R.T. fijo',                     tipo:'fijo_mens',  dflt:0,      showVar:false },
-    { item:'C.5', nombre:'A.R.T. variable',                 tipo:'pct_A',      dflt:0.08,   showVar:true  },
-    { item:'C.6', nombre:'Seguro de vida obligatorio',      tipo:'fijo_mens',  dflt:0,      showVar:false },
-    { item:'C',   nombre:'SUB TOTAL 2',                     tipo:'sub',        subs:['C.1','C.2','C.3','C.4','C.5','C.6'], showVar:false },
-    { item:'D.1', nombre:'Costo de despido',                tipo:'pct_AB_D',   dflt:0.12,   showVar:true  },
-    { item:'D.2', nombre:'IERIC',                           tipo:'pct_D1',     dflt:0.04,   showVar:true  },
-    { item:'D',   nombre:'SUB TOTAL 3',                     tipo:'sub',        subs:['D.1','D.2'], showVar:false },
-    { item:'E.1', nombre:'Gastos administrativos',          tipo:'fijo_gastos',dflt:800000, showVar:false, esMonto:true },
-    { item:'E',   nombre:'SUB TOTAL 4',                     tipo:'sub',        subs:['E.1'], showVar:false },
-    { item:'F',   nombre:'Improductivos',                   tipo:'pct_ABCDE',  dflt:0.01,   showVar:true  },
-    { item:'G',   nombre:'Impuesto a las ganancias',        tipo:'pct_D29',    dflt:0.01,   showVar:true  },
-    { item:'H',   nombre:'Impuestos munic + IIBB',          tipo:'pct_ABCDEF', dflt:0.01,   showVar:true  }
-  ];
-
-  // Estado de variables y montos (mapa item → valor)
-  var CHH_VAR = {};
-  CHH_CONF.forEach(function(r){ CHH_VAR[r.item] = r.dflt; });
-
-  // Adicionales
-  var CHH_ADIC = [
-    { item:'I', nombre:'Indumentaria y EPP',      mens:200000, editable:true },
-    { item:'J', nombre:'Adicional UOCRA Zona A.', mens:100000, editable:true },
-    { item:'K', nombre:'Comidas UOCRA',           mens:null,   editable:false, calc:'comida' },
-    { item:'L', nombre:'Preocupacionales',        mens:150000, editable:true },
-    { item:'M', nombre:'Adicional UOCRA COPA',    mens:null,   editable:false, calc:'copa' }
-  ];
-
-  function chhCalc() {
-    var basico = val('chh-basico') || 0;
-    var hmes   = val('chh-hmes')   || 189;
-    var ops    = val('chh-ops')    || 10;
-    var comida = val('chh-comida') || 10000;
-    var diasCom= val('chh-diascomida') || 21;
-    var copaPct= (val('chh-copa-pct') || 70) / 100;
-    var margen = val('chh-margen') || 1.4;
-
-    // Mapas de resultados
-    var M = {}, H = {};
-
-    // Helpers
-    function sumM(items){ var s=0; items.forEach(function(k){s+=M[k]||0;}); return s; }
-    function sumH(items){ var s=0; items.forEach(function(k){s+=H[k]||0;}); return s; }
-
-    CHH_CONF.forEach(function(r){
-      var v = CHH_VAR[r.item]; var m=0, h=0;
-      if (r.tipo === 'basico') {
-        m = basico * hmes;
-        h = basico;
-      } else if (r.tipo === 'pct_D8') {
-        m = (M['A.1']||0) * v;
-        h = m/hmes;  // Excel E9 = D9/C47 * D47; D47=1 → m/hmes
-      } else if (r.tipo === 'pct_D10') {
-        m = (M['A']||0) * v;
-        h = m/hmes;
-      } else if (r.tipo === 'pct_AB') {
-        // Excel C.1: (D8+D16+D9)*var = (A+B) mensual * var
-        m = ((M['A']||0) + (M['B']||0)) * v;
-        h = m/hmes;
-      } else if (r.tipo === 'pct_A') {
-        m = (M['A']||0) * v;
-        h = m/hmes;
-      } else if (r.tipo === 'fijo_mens') {
-        m = v;  // var guarda el monto fijo (ej: ART fijo)
-        h = m/hmes;
-      } else if (r.tipo === 'pct_AB_D') {
-        // D.1 = (A+B)*var, hora mensual / hmes
-        m = ((M['A']||0) + (M['B']||0)) * v;
-        h = ((H['A']||0) + (H['B']||0)) * v;  // Excel: (E10+E16)*C24
-      } else if (r.tipo === 'pct_D1') {
-        m = (M['D.1']||0) * v;
-        h = (H['D.1']||0) * v;  // Excel E25 = C25*E24
-      } else if (r.tipo === 'fijo_gastos') {
-        m = v;  // monto fijo (800000)
-        h = (m/hmes)/ops;
-      } else if (r.tipo === 'pct_ABCDE') {
-        m = ((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0)) * v;
-        h = ((H['A']||0)+(H['B']||0)+(H['C']||0)+(H['D']||0)+(H['E']||0)) * v;
-      } else if (r.tipo === 'pct_D29') {
-        // G = D29 * var (ganancias); hora = m/hmes (Excel E30=D30/C47)
-        m = (M['F']||0) * v;
-        h = m/hmes;
-      } else if (r.tipo === 'pct_ABCDEF') {
-        // H = (A+B+C+D+E+F)*var; hora = mensual/176 (Excel fijo /176)
-        m = ((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0)+(M['F']||0)) * v;
-        h = m/176;
-      } else if (r.tipo === 'sub') {
-        m = sumM(r.subs);
-        h = sumH(r.subs);
-      }
-      M[r.item] = m;
-      H[r.item] = h;
-    });
-
-    // Adicionales
-    var adic_m = {}, adic_h = {};
-    CHH_ADIC.forEach(function(ad){
-      var m;
-      if (ad.calc === 'comida') m = diasCom * comida;
-      else if (ad.calc === 'copa') m = basico * copaPct * hmes;  // D39 = E39*C47 = (C8*0.7)*C47
-      else m = ad.mens;
-      adic_m[ad.item] = m;
-      adic_h[ad.item] = m/hmes;
-    });
-
-    // ── Render tabla principal ──
-    var tb = document.getElementById('chh-tbody');
-    if (tb) {
-      tb.innerHTML = CHH_CONF.map(function(r){
-        var esSub = r.tipo === 'sub';
-        var esFijoMens = r.tipo === 'fijo_mens';
-        var esFijoGastos = r.tipo === 'fijo_gastos';
-        var varTxt = '';
-        if (!esSub) {
-          if (esFijoGastos) {
-            varTxt = '<input type="number" value="'+CHH_VAR[r.item]+'" step="10000" style="width:110px;text-align:right;font-size:12px" oninput="CHH_VAR[\''+r.item+'\']=parseFloat(this.value)||0;chhCalc()">';
-          } else if (esFijoMens) {
-            varTxt = '<input type="number" value="'+CHH_VAR[r.item]+'" step="1000" style="width:100px;text-align:right;font-size:12px" oninput="CHH_VAR[\''+r.item+'\']=parseFloat(this.value)||0;chhCalc()">';
-          } else if (r.showVar) {
-            varTxt = '<input type="number" value="'+(CHH_VAR[r.item]*100).toFixed(4)+'" step="0.01" style="width:72px;text-align:right;font-size:12px" oninput="CHH_VAR[\''+r.item+'\']=(parseFloat(this.value)||0)/100;chhCalc()"><span style="color:var(--txm);font-size:11px"> %</span>';
-          }
-        }
-        // Calcular h50, h100, noche para cada fila
-        var ch = H[r.item] || 0;
-        var h50val=0, h100val=0, nocheVal=0;
-        if (!esSub) {
-          if (r.tipo === 'basico') {
-            var bas = CHH_VAR['A.1'] || 0;
-            h50val   = bas * 1.5;
-            h100val  = bas * 2;
-            nocheVal = bas * 0.13;
-          } else if (r.tipo !== 'sub' && r.tipo !== 'fijo_mens' && r.tipo !== 'fijo_gastos') {
-            h50val  = ch * 1.25;
-            h100val = ch * (5/3);
-            nocheVal = (r.tipo === 'pct_D8') ? 0 : ch * 0.13;
-          }
-        } else {
-          // subtotal: sumar h50/h100/noche de sus hijos
-          (r.subs||[]).forEach(function(k){
-            var c2 = H[k]||0;
-            if (k==='A.1'){ var bas=CHH_VAR['A.1']||0; h50val+=bas*1.5; h100val+=bas*2; nocheVal+=bas*0.13; }
-            else if (k==='A.2'){ /* nada */ }
-            else { h50val+=c2*1.25; h100val+=c2*(5/3); nocheVal+=c2*0.13; }
-          });
-        }
-        var style = esSub ? 'background:var(--bg2);font-weight:700;' : '';
-        var fmtSub = function(v){ return v ? $f(v) : ''; };
-        return '<tr style="'+style+'">'
-          +'<td style="font-size:12px;color:var(--txm);font-weight:600">'+r.item+'</td>'
-          +'<td>'+r.nombre+'</td>'
-          +'<td style="text-align:right">'+varTxt+'</td>'
-          +'<td style="text-align:right'+(esSub?';color:var(--red2)':'')+'">'+$f(M[r.item])+'</td>'
-          +'<td style="text-align:right'+(esSub?';color:var(--green)':'')+';font-weight:'+(esSub?'700':'500')+'">'+$f(H[r.item])+'</td>'
-          +'<td style="text-align:right;color:#0891b2">'+fmtSub(h50val)+'</td>'
-          +'<td style="text-align:right;color:#7c3aed">'+fmtSub(h100val)+'</td>'
-          +'<td style="text-align:right;color:#b45309">'+fmtSub(nocheVal)+'</td>'
-          +'</tr>';
-      }).join('')
-      + '<tr style="background:rgba(239,68,68,.1);font-weight:700;border-top:2px solid var(--red2)">'
-        +'<td></td>'
-        +'<td style="color:var(--red2)">POR HORA SIN EPP</td>'
-        +'<td></td><td></td>'
-        +'<td style="text-align:right;color:var(--red2);font-size:14px">'+$f(H['A']+H['B']+H['C']+H['D']+H['E']+H['F']+H['G']+H['H'])+'</td>'
-        +'<td></td><td></td><td></td>'
-      +'</tr>';
-    }
-
-    // ── Render tabla adicionales ──
-    var adtb = document.getElementById('chh-adic-tbody');
-    if (adtb) {
-      adtb.innerHTML = CHH_ADIC.map(function(ad){
-        var mVal = adic_m[ad.item];
-        var hVal = adic_h[ad.item];
-        var mTxt = ad.editable
-          ? '<input type="number" value="'+ad.mens+'" step="10000" style="width:120px;text-align:right;font-size:12px" oninput="CHH_ADIC.find(function(x){return x.item==\''+ad.item+'\'}).mens=parseFloat(this.value)||0;chhCalc()">'
-          : $f(mVal);
-        return '<tr>'
-          +'<td style="font-size:12px;color:var(--txm);font-weight:600">'+ad.item+'</td>'
-          +'<td>'+ad.nombre+'</td>'
-          +'<td style="text-align:right">'+mTxt+'</td>'
-          +'<td style="text-align:right;font-weight:600">'+$f(hVal)+'</td>'
-          +'</tr>';
-      }).join('');
-    }
-
-    // ── Totales ──
-    var horaSinEPP = H['A']+H['B']+H['C']+H['D']+H['E']+H['F']+H['G']+H['H'];
-    var adicSum    = adic_h['I']+adic_h['J']+adic_h['K']+adic_h['L']+adic_h['M'];
-    var horaTotal  = horaSinEPP + adicSum;
-    var horaMargen = horaTotal * margen;
-    var jornalH    = 9;
-    var jornal     = horaMargen * jornalH;
-
-    // ── Resultado ──
-    var res = document.getElementById('chh-resultado');
-    if (res) res.innerHTML =
-      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Hora sin EPP</span><span style="font-weight:600">'+$f(horaSinEPP)+'</span></div>'
-     +'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px">Adicionales /h</span><span style="font-weight:600">'+$f(adicSum)+'</span></div>'
-     +'<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--br)"><span style="font-size:13px;font-weight:700">Hora total</span><span style="font-weight:700">'+$f(horaTotal)+'</span></div>'
-     +'<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:2px solid var(--red2);margin-bottom:6px"><span style="font-size:14px;font-weight:700">Hora × margen ('+margen+')</span><span style="font-size:22px;font-weight:800;color:var(--red2)">'+$f(horaMargen)+'</span></div>'
-     +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>Jornal '+jornalH+'hs</span><span style="font-weight:600">'+$f(jornal)+'</span></div>'
-     +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>Mensual (21 jornales)</span><span style="font-weight:600">'+$f(jornal*21)+'</span></div>';
-
-    var mi = document.getElementById('chh-margen-info');
-    if (mi) mi.innerHTML = 'Aplicado sobre hora total <strong>'+$f(horaTotal)+'</strong>';
-
-    // Mantener compatibilidad con el resto del módulo (categorías/obra)
-    if (typeof chhRenderCats === 'function') chhRenderCats();
-    if (typeof chhObraCalc === 'function') chhObraCalc();
+  // Fórmulas exactas verificadas contra el Excel:
+  // C.1 = A*0.20 (no A+B)
+  // D.1 = (A+B)*0.12
+  // D.2 = D.1*0.04 (IERIC = 4% del costo despido)
+  // F   = (A+B+C+D+E)*0.02
+  // G   = F*0.01
+  // H   = (A+B+C+D+E+F)*0.01
+  function chhCalcPuro(basico, hmes, comida, diasCom, copaPct) {
+    var A1 = basico * hmes;
+    var A2 = A1 * 0.20;
+    var A  = A1 + A2;
+    var B1 = A*0.053, B2=A*0.0833, B3=A*0.0567, B4=A*0.0253, B5=A*0.0189;
+    var B  = B1+B2+B3+B4+B5;
+    var C1 = A*0.20, C2=A*0.06, C3=A*0.0121, C4=0, C5=A*0.06, C6=0;
+    var C  = C1+C2+C3+C4+C5+C6;
+    var D1 = (A+B)*0.12;
+    var D2 = D1*0.04;
+    var D  = D1+D2;
+    var E  = 0;
+    var F  = (A+B+C+D+E)*0.02;
+    var G  = F*0.01;
+    var H  = (A+B+C+D+E+F)*0.01;
+    var horaSin = (A+B+C+D+E+F+G+H)/hmes;
+    var mJ = CHH.adicMens.J||100000;
+    var mL = CHH.adicMens.L||50000;
+    var mM = diasCom*comida;
+    var mN = CHH.adicMens.N||300000;
+    var mO = basico*(copaPct/100)*hmes;
+    var adicH = (mJ+mL+mM+mN+mO)/hmes;
+    var horaTotal = horaSin+adicH;
+    return {
+      M:{A1:A1,A2:A2,A:A,B1:B1,B2:B2,B3:B3,B4:B4,B5:B5,B:B,
+         C1:C1,C2:C2,C3:C3,C4:C4,C5:C5,C6:C6,C:C,
+         D1:D1,D2:D2,D:D,E:E,F:F,G:G,H:H},
+      adic:{J:mJ/hmes,L:mL/hmes,M:mM/hmes,N:mN/hmes,O:mO/hmes},
+      mens:{J:mJ,L:mL,M:mM,N:mN,O:mO},
+      horaSin:horaSin,adicH:adicH,horaTotal:horaTotal,
+      hora50:horaTotal*1.5,hora100:horaTotal*2,horaNoch:horaTotal*1.13,hmes:hmes
+    };
   }
 
-  // chhCalcHora: función legacy para categorías/obra — calcula con el mismo motor
-  function chhCalcHora(basico) {
-    var bakBasico = val('chh-basico');
-    var inp = document.getElementById('chh-basico');
-    if (inp) inp.value = basico;
-    chhCalc();
-    var hmes = val('chh-hmes') || 189;
-    // Leer valores recién calculados desde el resultado
-    // Recalcular los totales acá sin depender del DOM
-    var ops = val('chh-ops') || 10;
-    var comida = val('chh-comida') || 10000;
+  function chhCalc() {
+    var basico  = val('chh-basico')     || 7954.3;
+    var hmes    = val('chh-hmes')       || 189;
+    var comida  = val('chh-comida')     || 10000;
     var diasCom = val('chh-diascomida') || 21;
-    var copaPct = (val('chh-copa-pct') || 70) / 100;
-    var margen = val('chh-margen') || 1.4;
-    var M = {}, H = {};
-    CHH_CONF.forEach(function(r){
-      var v = CHH_VAR[r.item]; var m=0, h=0;
-      if (r.tipo==='basico'){m=basico*hmes;h=basico;}
-      else if (r.tipo==='pct_D8'){m=(M['A.1']||0)*v;h=m/hmes;}
-      else if (r.tipo==='pct_D10'){m=(M['A']||0)*v;h=m/hmes;}
-      else if (r.tipo==='pct_AB'){m=((M['A']||0)+(M['B']||0))*v;h=m/hmes;}
-      else if (r.tipo==='pct_A'){m=(M['A']||0)*v;h=m/hmes;}
-      else if (r.tipo==='fijo_mens'){m=v;h=m/hmes;}
-      else if (r.tipo==='pct_AB_D'){m=((M['A']||0)+(M['B']||0))*v;h=((H['A']||0)+(H['B']||0))*v;}
-      else if (r.tipo==='pct_D1'){m=(M['D.1']||0)*v;h=(H['D.1']||0)*v;}
-      else if (r.tipo==='fijo_gastos'){m=v;h=(m/hmes)/ops;}
-      else if (r.tipo==='pct_ABCDE'){m=((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0))*v;h=((H['A']||0)+(H['B']||0)+(H['C']||0)+(H['D']||0)+(H['E']||0))*v;}
-      else if (r.tipo==='pct_D29'){m=(M['F']||0)*v;h=m/hmes;}
-      else if (r.tipo==='pct_ABCDEF'){m=((M['A']||0)+(M['B']||0)+(M['C']||0)+(M['D']||0)+(M['E']||0)+(M['F']||0))*v;h=m/176;}
-      else if (r.tipo==='sub'){var s1=0,s2=0;r.subs.forEach(function(k){s1+=M[k]||0;s2+=H[k]||0;});m=s1;h=s2;}
-      M[r.item]=m; H[r.item]=h;
-    });
-    var mI=200000,mJ=100000,mK=diasCom*comida,mL=150000,mM=basico*copaPct*hmes;
-    var adicH=(mI+mJ+mK+mL+mM)/hmes;
-    var horaSin=H['A']+H['B']+H['C']+H['D']+H['E']+H['F']+H['G']+H['H'];
-    var horaNormal = (horaSin+adicH)*margen;
-    if (inp) inp.value = bakBasico;  // restaurar
-    return {
-      subA:H['A'], subB:H['B'], subC:H['C'], subD:H['D'], subE:H['E'], subFH:H['F']+H['G']+H['H'],
-      horaSin:horaSin, adicH:adicH,
-      horaNormal:horaNormal,
-      hora50:horaNormal*1.5, hora100:horaNormal*2, horaNoch:horaNormal*1.13,
-      hmes:hmes
-    };
+    var copaPct = val('chh-copa-pct')   || 70;
+    var extraPct= val('chh-extra-pct')  || 0;
+    var r = chhCalcPuro(basico,hmes,comida,diasCom,copaPct);
+    var M = r.M;
+
+    var rows = [
+      {item:'A.1',nom:'SUELDO BÁSICO',            mens:M.A1, h:M.A1/hmes},
+      {item:'A.2',nom:'PRESENTISMO (20%)',         mens:M.A2, h:M.A2/hmes},
+      {item:'A',  nom:'BÁSICO',                    mens:M.A,  h:M.A/hmes, st:true},
+      {item:'B.1',nom:'VACACIONES (5.3%)',         mens:M.B1, h:M.B1/hmes},
+      {item:'B.2',nom:'S.A.C. (8.33%)',            mens:M.B2, h:M.B2/hmes},
+      {item:'B.3',nom:'FERIADOS (5.67%)',          mens:M.B3, h:M.B3/hmes},
+      {item:'B.4',nom:'ENFERMEDAD (2.53%)',        mens:M.B4, h:M.B4/hmes},
+      {item:'B.5',nom:'ACCIDENTE (1.89%)',         mens:M.B5, h:M.B5/hmes},
+      {item:'B',  nom:'SUB TOTAL 1',               mens:M.B,  h:M.B/hmes, st:true},
+      {item:'C.1',nom:'APORTES PREVISIONALES (20%)', mens:M.C1,h:M.C1/hmes},
+      {item:'C.2',nom:'OBRA SOCIAL (6%)',          mens:M.C2, h:M.C2/hmes},
+      {item:'C.3',nom:'SEG. COLECTIVO Y SEP (1.21%)',mens:M.C3,h:M.C3/hmes},
+      {item:'C.4',nom:'A.R.T. FIJO',              mens:0,    h:0},
+      {item:'C.5',nom:'A.R.T. VARIABLE (6%)',     mens:M.C5, h:M.C5/hmes},
+      {item:'C.6',nom:'SEG. VIDA OBLIGATORIO',    mens:0,    h:0},
+      {item:'C',  nom:'SUB TOTAL 2',              mens:M.C,  h:M.C/hmes, st:true},
+      {item:'D.1',nom:'COSTO DE DESPIDO 12% (A+B)',mens:M.D1,h:M.D1/hmes},
+      {item:'D.2',nom:'IERIC (4% del despido)',   mens:M.D2, h:M.D2/hmes},
+      {item:'D',  nom:'SUB TOTAL 3',              mens:M.D,  h:M.D/hmes, st:true},
+      {item:'E',  nom:'GASTOS ADMINISTRATIVOS',   mens:0,    h:0},
+      {item:'F',  nom:'IMPRODUCTIVOS / UTILIDAD (2%)',mens:M.F,h:M.F/hmes},
+      {item:'G',  nom:'IMP. GANANCIAS (1% de F)',  mens:M.G,  h:M.G/hmes},
+      {item:'H',  nom:'MUNIC + ING.BRUTOS (1%)',  mens:M.H,  h:M.H/hmes},
+    ];
+    var tb = document.getElementById('chh-tbody');
+    if (tb) tb.innerHTML = rows.map(function(row){
+      var bg = row.st ? 'background:var(--bg2);font-weight:700' : '';
+      return '<tr style="'+bg+'">'+
+        '<td>'+row.item+'</td>'+
+        '<td>'+row.nom+'</td>'+
+        '<td style="text-align:right;color:var(--txm);font-size:11px"></td>'+
+        '<td style="text-align:right">'+Math.round(row.mens).toLocaleString('es-AR')+'</td>'+
+        '<td style="text-align:right'+(row.st?';color:var(--red2)':'')+'">'+Math.round(row.h).toLocaleString('es-AR')+'</td>'+
+        '<td style="text-align:right">'+Math.round(row.h*1.5).toLocaleString('es-AR')+'</td>'+
+        '<td style="text-align:right">'+Math.round(row.h*2).toLocaleString('es-AR')+'</td>'+
+        '<td style="text-align:right">'+Math.round(row.h*1.13).toLocaleString('es-AR')+'</td>'+
+        '</tr>';
+    }).join('');
+
+    var adics = [
+      {item:'J',nom:'INDUMENTARIA Y EPP',    mens:r.mens.J, key:'J'},
+      {item:'L',nom:'ADICIONAL UOCRA ZONA A',mens:r.mens.L, key:'L'},
+      {item:'M',nom:'COMIDAS UOCRA',         mens:r.mens.M, key:null, ro:true},
+      {item:'N',nom:'PREOCUPACIONALES',      mens:r.mens.N, key:'N'},
+      {item:'O',nom:'COPA ('+copaPct+'% básico)',mens:r.mens.O,key:null,ro:true},
+    ];
+    var at = document.getElementById('chh-adic-tbody');
+    if (at) at.innerHTML = adics.map(function(ad){
+      return '<tr>'+
+        '<td>'+ad.item+'</td><td>'+ad.nom+'</td>'+
+        '<td><input type="number" class="chh-adic-inp" data-key="'+(ad.key||'')+'" value="'+Math.round(ad.mens)+'" '+
+          (ad.ro?'readonly style="background:var(--bg2);color:var(--txm);width:150px;text-align:right"':'style="width:150px;text-align:right"')+'></td>'+
+        '<td style="text-align:right;font-weight:600">'+Math.round(ad.mens/hmes).toLocaleString('es-AR')+'</td>'+
+        '</tr>';
+    }).join('');
+
+    var horaExtra = r.horaTotal*(1+extraPct/100);
+    var res = document.getElementById('chh-resultado');
+    if (res) res.innerHTML =
+      row_res('Hora sin EPP',     r.horaSin)+
+      row_res('Adicionales /h',   r.adicH)+
+      row_res('HORA TOTAL',       r.horaTotal, true)+
+      row_res('Hora 50%',         r.hora50)+
+      row_res('Hora 100%',        r.hora100)+
+      row_res('Hora nocturna +13%',r.horaNoch)+
+      row_res('Jornal 9hs',       r.horaTotal*9)+
+      row_res('Mensual 21 jornales', r.horaTotal*9*21)+
+      (extraPct>0?'<div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:6px;border-top:2px solid var(--green)"><span style="font-weight:700">Hora +'+extraPct+'%</span><span style="font-size:20px;font-weight:800;color:var(--green)">'+$f(horaExtra)+'</span></div>':'');
+
+    var ei=document.getElementById('chh-extra-info');
+    if(ei) ei.textContent = extraPct>0?'Con +'+extraPct+'%: '+$f(horaExtra)+'/hora':'Sin extra — valor hora completa.';
+
+    chhRenderCats();
+    chhObraCalc();
   }
   window.chhCalc = chhCalc;
 
-  // ── CATEGORÍAS ───────────────────────────────────────
+  function row_res(label, val, big) {
+    return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)">'+
+      '<span style="font-size:13px'+(big?';font-weight:700':'')+'">'+label+'</span>'+
+      '<span style="'+(big?'font-size:20px;font-weight:800;color:var(--red2)':'font-weight:600')+'">'+$f(val)+'</span></div>';
+  }
+
   function chhRenderCats() {
     var tbl = document.getElementById('chh-cats-tbl');
     if (!tbl) return;
-    tbl.innerHTML = CHH.cats.map(function(cat, i) {
-      var r = chhCalcHora(cat.basico);
-      var hmes = val('chh-hmes') || 176;
-      return '<tr>' +
-        '<td style="font-weight:600">' + cat.nombre + '</td>' +
-        '<td><input type="number" class="chh-cat-bas-inp" data-i="' + i + '" value="' + cat.basico + '" style="width:110px;text-align:right" min="0"></td>' +
-        '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(r.horaNormal) + '</td>' +
-        '<td style="text-align:right">' + $f(r.hora50) + '</td>' +
-        '<td style="text-align:right">' + $f(r.hora100) + '</td>' +
-        '<td style="text-align:right">' + $f(r.horaNoch) + '</td>' +
-        '<td style="text-align:right">' + $f(r.horaNormal * 9) + '</td>' +
-        '<td><button class="btn btns btnd chh-cat-del" data-i="' + i + '">✕</button></td>' +
+    var hmes=val('chh-hmes')||189, comida=val('chh-comida')||10000;
+    var diasCom=val('chh-diascomida')||21, copaPct=val('chh-copa-pct')||70;
+    var extraPct=val('chh-extra-pct')||0;
+    tbl.innerHTML = CHH.cats.map(function(cat,i){
+      var r=chhCalcPuro(cat.basico,hmes,comida,diasCom,copaPct);
+      var he=r.horaTotal*(1+extraPct/100);
+      return '<tr>'+
+        '<td style="font-weight:600">'+cat.nombre+'</td>'+
+        '<td><input type="number" class="chh-cat-bas-inp" data-i="'+i+'" value="'+cat.basico+'" style="width:110px;text-align:right" min="0"></td>'+
+        '<td style="text-align:right;font-weight:700;color:var(--red2)">'+$f(r.horaTotal)+'</td>'+
+        '<td style="text-align:right">'+$f(r.hora50)+'</td>'+
+        '<td style="text-align:right">'+$f(r.hora100)+'</td>'+
+        '<td style="text-align:right">'+$f(r.horaNoch)+'</td>'+
+        '<td style="text-align:right">'+$f(r.horaTotal*9)+'</td>'+
+        '<td style="text-align:right;color:var(--green);font-weight:700">'+(extraPct>0?$f(he):'—')+'</td>'+
+        '<td><button class="btn btns btnd chh-cat-del" data-i="'+i+'">\u2715</button></td>'+
         '</tr>';
     }).join('');
-    // Select en obra
-    var sel = document.getElementById('chh-op-cat-sel');
-    if (sel) {
-      var prev = sel.value;
-      sel.innerHTML = CHH.cats.map(function(c) {
-        return '<option value="' + c.id + '"' + (c.id === prev ? ' selected' : '') + '>' + c.nombre + '</option>';
-      }).join('');
-    }
   }
 
-  // ── ESTRUCTURA DE OBRA ──────────────────────────────
   function chhObraRenderOps() {
-    var tbl = document.getElementById('chh-op-tbl');
-    if (!tbl) return;
-    var dias  = val('chh-ob-dias') || 20;
-    var hn    = val('chh-ob-hn') || 9;
-    var h50   = val('chh-ob-h50') || 0;
-    var h100  = val('chh-ob-h100') || 0;
-
-    tbl.innerHTML = CHH.obraOps.map(function(op, i) {
-      var cat = CHH.cats.find(function(c) { return c.id === op.catId; }) || CHH.cats[0];
+    var tbl=document.getElementById('chh-op-tbl'); if (!tbl) return;
+    var dias=val('chh-ob-dias')||20, hn=val('chh-ob-hn')||9;
+    var h50=val('chh-ob-h50')||0, h100=val('chh-ob-h100')||0;
+    var hmes=val('chh-hmes')||189, comida=val('chh-comida')||10000;
+    var diasCom=val('chh-diascomida')||21, copaPct=val('chh-copa-pct')||70;
+    tbl.innerHTML = CHH.obraOps.map(function(op,i){
+      var cat=CHH.cats.find(function(c){return c.id===op.catId;})||CHH.cats[0];
       if (!cat) return '';
-      var r = chhCalcHora(cat.basico);
-      var costoDia = r.horaNormal * hn + r.hora50 * h50 + r.hora100 * h100;
-      var costoTotal = costoDia * dias * op.cantidad;
-      return '<tr>' +
-        '<td><select class="chh-op-cat" data-i="' + i + '" style="font-size:13px">' +
-          CHH.cats.map(function(c) { return '<option value="' + c.id + '"' + (c.id === op.catId ? ' selected' : '') + '>' + c.nombre + '</option>'; }).join('') +
-        '</select></td>' +
-        '<td><input type="number" class="chh-op-cant" data-i="' + i + '" value="' + op.cantidad + '" min="1" style="width:60px;text-align:right"></td>' +
-        '<td style="text-align:right">' + $f(r.horaNormal) + '</td>' +
-        '<td style="text-align:right">' + $f(costoDia) + '</td>' +
-        '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(costoTotal) + '</td>' +
-        '<td><button class="btn btns btnd chh-op-del" data-i="' + i + '">✕</button></td>' +
+      var r=chhCalcPuro(cat.basico,hmes,comida,diasCom,copaPct);
+      var costoDia=r.horaTotal*hn+r.hora50*h50+r.hora100*h100;
+      var costoTotal=costoDia*dias*(op.cantidad||1);
+      return '<tr>'+
+        '<td><select class="chh-op-cat" data-i="'+i+'" style="font-size:13px">'+
+          CHH.cats.map(function(c){return '<option value="'+c.id+'"'+(c.id===op.catId?' selected':'')+'>'+c.nombre+'</option>';}).join('')+
+        '</select></td>'+
+        '<td><input type="number" class="chh-op-cant" data-i="'+i+'" value="'+(op.cantidad||1)+'" min="1" style="width:60px;text-align:right"></td>'+
+        '<td style="text-align:right">'+$f(r.horaTotal)+'</td>'+
+        '<td style="text-align:right">'+$f(costoDia)+'</td>'+
+        '<td style="text-align:right;font-weight:700;color:var(--red2)">'+$f(costoTotal)+'</td>'+
+        '<td><button class="btn btns btnd chh-op-del" data-i="'+i+'">\u2715</button></td>'+
         '</tr>';
     }).join('');
   }
 
   function chhObraRenderCostos() {
-    var tbl = document.getElementById('chh-costos-tbl');
-    if (!tbl) return;
-    tbl.innerHTML = CHH.obraCostos.map(function(c, i) {
-      var total = c.importe * (c.iva || 1);
-      return '<tr>' +
-        '<td><input type="text" class="chh-cost-nom" data-i="' + i + '" value="' + (c.concepto||'').replace(/"/g,'&quot;') + '" style="min-width:140px"></td>' +
-        '<td><input type="number" class="chh-cost-imp" data-i="' + i + '" value="' + c.importe + '" min="0" style="width:120px;text-align:right"></td>' +
-        '<td><input type="number" class="chh-cost-iva" data-i="' + i + '" value="' + (c.iva||1) + '" step="0.1" min="1" style="width:70px;text-align:right"></td>' +
-        '<td style="text-align:right;font-weight:700;color:var(--red2)">' + $f(total) + '</td>' +
-        '<td><button class="btn btns btnd chh-cost-del" data-i="' + i + '">✕</button></td>' +
+    var tbl=document.getElementById('chh-costos-tbl'); if (!tbl) return;
+    tbl.innerHTML = CHH.obraCostos.map(function(c,i){
+      var total=(c.cantidad||1)*(c.precio||0)*(c.iva||1);
+      return '<tr>'+
+        '<td><input type="text" class="chh-cost-nom" data-i="'+i+'" value="'+(c.concepto||'').replace(/"/g,'&quot;')+'" style="min-width:140px"></td>'+
+        '<td><input type="number" class="chh-cost-cant" data-i="'+i+'" value="'+(c.cantidad||1)+'" min="0" style="width:80px;text-align:right"></td>'+
+        '<td><input type="number" class="chh-cost-prec" data-i="'+i+'" value="'+(c.precio||0)+'" min="0" style="width:110px;text-align:right"></td>'+
+        '<td><input type="number" class="chh-cost-iva" data-i="'+i+'" value="'+(c.iva||1)+'" step="0.1" min="1" style="width:60px;text-align:right"></td>'+
+        '<td style="text-align:right;font-weight:700;color:var(--red2)">'+$f(total)+'</td>'+
+        '<td><button class="btn btns btnd chh-cost-del" data-i="'+i+'">\u2715</button></td>'+
         '</tr>';
     }).join('');
   }
 
   function chhObraCalc() {
-    var dias  = val('chh-ob-dias') || 20;
-    var hn    = val('chh-ob-hn') || 9;
-    var h50   = val('chh-ob-h50') || 0;
-    var h100  = val('chh-ob-h100') || 0;
-
-    // Costo MO
-    var totalMO = CHH.obraOps.reduce(function(acc, op) {
-      var cat = CHH.cats.find(function(c) { return c.id === op.catId; }) || CHH.cats[0];
-      if (!cat) return acc;
-      var r = chhCalcHora(cat.basico);
-      var costoDia = r.horaNormal * hn + r.hora50 * h50 + r.hora100 * h100;
-      return acc + costoDia * dias * op.cantidad;
-    }, 0);
-
-    var elMO = document.getElementById('chh-ob-mo');
-    if (elMO) elMO.textContent = $f(totalMO);
-
-    // Otros costos
-    var totalOtros = CHH.obraCostos.reduce(function(a, c) { return a + c.importe * (c.iva || 1); }, 0);
-    var elOtros = document.getElementById('chh-ob-otros');
-    if (elOtros) elOtros.textContent = $f(totalOtros);
-
-    // Estructura
-    var subtotal = totalMO + totalOtros;
-    var adm   = subtotal * pct('chh-ob-adm');
-    var imp   = subtotal * pct('chh-ob-imp');
-    var rent  = (subtotal + adm + imp) * pct('chh-ob-rent');
-    var sub2  = subtotal + adm + imp + rent;
-    var tax   = sub2 * pct('chh-ob-tax');
-    var total = sub2 + tax;
-
-    var desg = document.getElementById('chh-ob-desglose');
-    if (desg) desg.innerHTML = [
-      ['MO total', totalMO],
-      ['Otros costos', totalOtros],
-      ['Subtotal directo', subtotal],
-      ['Administrativo', adm],
-      ['Imprevistos', imp],
-      ['Renta bruta', rent],
-      ['Subtotal 2', sub2],
-      ['Impuestos', tax],
-    ].map(function(row) {
-      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:13px">' +
-        '<span>' + row[0] + '</span><span style="font-weight:600">' + $f(row[1]) + '</span></div>';
+    chhObraRenderOps(); chhObraRenderCostos();
+    var dias=val('chh-ob-dias')||20, hn=val('chh-ob-hn')||9;
+    var h50=val('chh-ob-h50')||0, h100=val('chh-ob-h100')||0;
+    var hmes=val('chh-hmes')||189, comida=val('chh-comida')||10000;
+    var diasCom=val('chh-diascomida')||21, copaPct=val('chh-copa-pct')||70;
+    var totalMO=CHH.obraOps.reduce(function(acc,op){
+      var cat=CHH.cats.find(function(c){return c.id===op.catId;})||CHH.cats[0];
+      if(!cat) return acc;
+      var r=chhCalcPuro(cat.basico,hmes,comida,diasCom,copaPct);
+      return acc+(r.horaTotal*hn+r.hora50*h50+r.hora100*h100)*dias*(op.cantidad||1);
+    },0);
+    var totalOtros=CHH.obraCostos.reduce(function(a,c){return a+(c.cantidad||1)*(c.precio||0)*(c.iva||1);},0);
+    var eM=document.getElementById('chh-ob-mo'); if(eM) eM.textContent=$f(totalMO);
+    var eO=document.getElementById('chh-ob-otros'); if(eO) eO.textContent=$f(totalOtros);
+    var sub1=totalMO+totalOtros;
+    var adm=sub1*(val('chh-ob-adm')/100), imp=sub1*(val('chh-ob-imp')/100);
+    var sub2=sub1+adm+imp, rent=sub2*(val('chh-ob-rent')/100);
+    var sub3=sub2+rent, tax=sub3*(val('chh-ob-tax')/100), total=sub3+tax;
+    var dg=document.getElementById('chh-ob-desglose');
+    if(dg) dg.innerHTML=[
+      ['MO total',totalMO],['Otros costos',totalOtros],['Subtotal directo',sub1],
+      ['Administrativo',adm],['Imprevistos',imp],['Sub + adm + imp',sub2],
+      ['Renta bruta',rent],['Sub total 2',sub3],['Impuestos',tax]
+    ].map(function(row){
+      return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--br);font-size:13px">'+
+        '<span>'+row[0]+'</span><span style="font-weight:600">'+$f(row[1])+'</span></div>';
     }).join('');
-
-    var hsTotales = dias * (hn + h50 + h100) * Math.max(CHH.obraOps.reduce(function(a,o){ return a+o.cantidad; }, 0), 1);
-
-    var res = document.getElementById('chh-ob-resultado');
-    if (res) res.innerHTML =
-      '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="font-size:13px">Valor total obra</span><span style="font-size:22px;font-weight:800;color:var(--red2)">' + $f(total) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Horas totales MO</span><span style="font-weight:700">' + hsTotales + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:13px">Valor hora final</span><span style="font-weight:700">' + (hsTotales > 0 ? $f(total / hsTotales) : '—') + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between"><span style="font-size:13px">% MO sobre total</span><span style="font-weight:700">' + (total > 0 ? (totalMO/total*100).toFixed(1) : '0') + '%</span></div>';
+    var totalOps=CHH.obraOps.reduce(function(a,o){return a+(o.cantidad||1);},0);
+    var hsTot=dias*(hn+h50+h100)*Math.max(totalOps,1);
+    var rr=document.getElementById('chh-ob-resultado');
+    if(rr) rr.innerHTML=
+      '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span>Valor total obra</span><span style="font-size:22px;font-weight:800;color:var(--red2)">'+$f(total)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Horas totales MO</span><span style="font-weight:700">'+hsTot+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Valor hora final</span><span style="font-weight:700">'+(hsTot>0?$f(total/hsTot):'—')+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span>% MO sobre total</span><span style="font-weight:700">'+(total>0?(totalMO/total*100).toFixed(1):'0')+'%</span></div>';
   }
   window.chhObraCalc = chhObraCalc;
 
-  // ── INIT ──────────────────────────────────────────────
   function chhInit() {
     chhCalc();
-    chhRenderCats();
-    chhObraRenderOps();
-    chhObraRenderCostos();
-    chhObraCalc();
-
-    // Btn agregar categoría
-    var btnCat = document.getElementById('btn-chh-add-cat');
-    if (btnCat) btnCat.addEventListener('click', function() {
-      var n = (document.getElementById('chh-cat-nom') || {}).value;
-      var b = parseFloat((document.getElementById('chh-cat-bas') || {}).value) || 0;
-      if (!n || !n.trim()) return;
-      CHH.cats.push({ id: 'cat-' + Date.now(), nombre: n.trim(), basico: b });
-      document.getElementById('chh-cat-nom').value = '';
+    var page=document.getElementById('costohh'); if(!page) return;
+    var bc=document.getElementById('btn-chh-add-cat');
+    if(bc) bc.addEventListener('click',function(){
+      var n=(document.getElementById('chh-cat-nom')||{}).value;
+      var b=parseFloat((document.getElementById('chh-cat-bas')||{}).value)||0;
+      if(!n||!n.trim()) return;
+      CHH.cats.push({id:'cat-'+Date.now(),nombre:n.trim(),basico:b});
+      document.getElementById('chh-cat-nom').value='';
       chhSv(); chhRenderCats();
     });
-
-    // Btn agregar operario
-    var btnOp = document.getElementById('btn-chh-add-op');
-    if (btnOp) btnOp.addEventListener('click', function() {
-      var catId = CHH.cats.length ? CHH.cats[0].id : '';
-      CHH.obraOps.push({ catId: catId, cantidad: 1 });
-      chhSv(); chhObraRenderOps(); chhObraCalc();
+    var bo=document.getElementById('btn-chh-add-op');
+    if(bo) bo.addEventListener('click',function(){
+      CHH.obraOps.push({catId:CHH.cats.length?CHH.cats[0].id:'',cantidad:1});
+      chhSv(); chhObraCalc();
     });
-
-    // Btn agregar costo
-    var btnCosto = document.getElementById('btn-chh-add-costo');
-    if (btnCosto) btnCosto.addEventListener('click', function() {
-      CHH.obraCostos.push({ concepto: '', importe: 0, iva: 1 });
+    var bco=document.getElementById('btn-chh-add-costo');
+    if(bco) bco.addEventListener('click',function(){
+      CHH.obraCostos.push({concepto:'',cantidad:1,precio:0,iva:1});
       chhSv(); chhObraRenderCostos(); chhObraCalc();
     });
-
-    // Delegación de eventos en la pestaña costohh
-    var page = document.getElementById('costohh');
-    if (!page) return;
-
-    page.addEventListener('change', function(e) {
-      var t = e.target;
-      if (t.classList.contains('chh-op-cat')) {
-        CHH.obraOps[+t.dataset.i].catId = t.value;
-        chhSv(); chhObraRenderOps(); chhObraCalc();
-      } else if (t.classList.contains('chh-op-cant')) {
-        CHH.obraOps[+t.dataset.i].cantidad = parseInt(t.value) || 1;
-        chhSv(); chhObraRenderOps(); chhObraCalc();
-      } else if (t.classList.contains('chh-cost-imp')) {
-        CHH.obraCostos[+t.dataset.i].importe = parseFloat(t.value) || 0;
-        chhSv(); chhObraRenderCostos(); chhObraCalc();
-      } else if (t.classList.contains('chh-cost-iva')) {
-        CHH.obraCostos[+t.dataset.i].iva = parseFloat(t.value) || 1;
-        chhSv(); chhObraRenderCostos(); chhObraCalc();
-      } else if (t.classList.contains('chh-cat-bas-inp')) {
-        CHH.cats[+t.dataset.i].basico = parseFloat(t.value) || 0;
-        chhSv(); chhCalc();
-      }
+    page.addEventListener('change',function(e){
+      var t=e.target;
+      if(t.classList.contains('chh-op-cat')){CHH.obraOps[+t.dataset.i].catId=t.value;chhSv();chhObraCalc();}
+      else if(t.classList.contains('chh-op-cant')){CHH.obraOps[+t.dataset.i].cantidad=parseInt(t.value)||1;chhSv();chhObraCalc();}
+      else if(t.classList.contains('chh-cost-prec')){CHH.obraCostos[+t.dataset.i].precio=parseFloat(t.value)||0;chhSv();chhObraRenderCostos();chhObraCalc();}
+      else if(t.classList.contains('chh-cost-cant')){CHH.obraCostos[+t.dataset.i].cantidad=parseFloat(t.value)||1;chhSv();chhObraRenderCostos();chhObraCalc();}
+      else if(t.classList.contains('chh-cost-iva')){CHH.obraCostos[+t.dataset.i].iva=parseFloat(t.value)||1;chhSv();chhObraRenderCostos();chhObraCalc();}
+      else if(t.classList.contains('chh-cat-bas-inp')){CHH.cats[+t.dataset.i].basico=parseFloat(t.value)||0;chhSv();chhCalc();}
+      else if(t.classList.contains('chh-adic-inp')&&t.dataset.key){CHH.adicMens[t.dataset.key]=parseFloat(t.value)||0;chhSv();chhCalc();}
     });
-
-    page.addEventListener('input', function(e) {
-      var t = e.target;
-      if (t.classList.contains('chh-cost-nom')) {
-        CHH.obraCostos[+t.dataset.i].concepto = t.value;
-        chhSv();
-      }
+    page.addEventListener('input',function(e){
+      var t=e.target;
+      if(t.classList.contains('chh-cost-nom')){CHH.obraCostos[+t.dataset.i].concepto=t.value;chhSv();}
     });
-
-    page.addEventListener('click', function(e) {
-      var t = e.target;
-      if (t.classList.contains('chh-cat-del')) {
-        CHH.cats.splice(+t.dataset.i, 1);
-        chhSv(); chhCalc();
-      } else if (t.classList.contains('chh-op-del')) {
-        CHH.obraOps.splice(+t.dataset.i, 1);
-        chhSv(); chhObraRenderOps(); chhObraCalc();
-      } else if (t.classList.contains('chh-cost-del')) {
-        CHH.obraCostos.splice(+t.dataset.i, 1);
-        chhSv(); chhObraRenderCostos(); chhObraCalc();
-      }
+    page.addEventListener('click',function(e){
+      var t=e.target;
+      if(t.classList.contains('chh-cat-del')){CHH.cats.splice(+t.dataset.i,1);chhSv();chhCalc();}
+      else if(t.classList.contains('chh-op-del')){CHH.obraOps.splice(+t.dataset.i,1);chhSv();chhObraCalc();}
+      else if(t.classList.contains('chh-cost-del')){CHH.obraCostos.splice(+t.dataset.i,1);chhSv();chhObraRenderCostos();chhObraCalc();}
     });
   }
 
-  // Correr cuando el DOM esté listo
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', chhInit);
-  } else {
-    chhInit();
-  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',chhInit);
+  else chhInit();
 
 })();
+
 </script>
 
 <div class="mo" id="mo-gp-preview" style="align-items:flex-start;padding:16px;overflow-y:auto">
@@ -4017,110 +3794,107 @@ document.addEventListener('DOMContentLoaded', function() {
   <!-- SUB: CALCULO DE HORA -->
   <div id="chh-calc" class="sp on">
     <div class="card" style="margin-bottom:14px;border-top:3px solid var(--red2)">
-      <div class="sttl">Cálculo Valor Hora — Apertura de Costos</div>
-      <p style="font-size:12px;color:var(--txm);margin:4px 0 12px">Replica exacta del Excel. Editá el básico y los porcentajes para ver el impacto en tiempo real.</p>
+      <div class="sttl">Apertura de Costos — Hora Hombre</div>
+      <p style="font-size:12px;color:var(--txm);margin:4px 0 12px">Fórmulas replicadas del Excel. Modificá el básico y parámetros para ver el impacto en tiempo real.</p>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
-        <div class="fg" style="max-width:180px">
-          <label style="color:var(--red2);font-weight:700">★ Sueldo Básico (variable)</label>
-          <input type="number" id="chh-basico" value="5142" step="0.01" oninput="chhCalc()" style="border:2px solid var(--red2);font-weight:700;font-size:14px">
+        <div class="fg" style="max-width:200px">
+          <label style="color:var(--red2);font-weight:700">★ Básico hora (ARS)</label>
+          <input type="number" id="chh-basico" value="7954.3" step="0.01" oninput="chhCalc()" style="border:2px solid var(--red2);font-weight:700;font-size:14px">
         </div>
-        <div class="fg" style="max-width:120px">
-          <label>Horas mensuales</label>
+        <div class="fg" style="max-width:130px">
+          <label>Horas/mes</label>
           <input type="number" id="chh-hmes" value="189" step="1" oninput="chhCalc()">
         </div>
-        <div class="fg" style="max-width:120px">
-          <label>Operadores</label>
-          <input type="number" id="chh-ops" value="10" step="1" min="1" oninput="chhCalc()">
-        </div>
-      </div>
-    </div>
-
-    <!-- TABLA PRINCIPAL -->
-    <div class="card" style="margin-bottom:14px">
-      <div style="overflow-x:auto">
-        <table style="font-size:13px;min-width:640px;width:100%">
-          <thead>
-            <tr style="background:var(--bg2)">
-              <th style="width:55px">ITEM</th>
-              <th>CONCEPTO</th>
-              <th style="text-align:right;width:100px">VARIABLE</th>
-              <th style="text-align:right;width:130px">MENSUAL</th>
-              <th style="text-align:right;width:110px">COSTO HORA</th>
-              <th style="text-align:right;width:110px">HORA 50%</th>
-              <th style="text-align:right;width:110px">HORA 100%</th>
-              <th style="text-align:right;width:100px">NOCHE 13%</th>
-            </tr>
-          </thead>
-          <tbody id="chh-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- ADICIONALES -->
-    <div class="card" style="margin-bottom:14px;border-top:3px solid var(--blu)">
-      <div class="sttl">Adicionales — monto mensual ÷ horas/mes</div>
-      <div style="overflow-x:auto;margin-top:10px">
-        <table style="font-size:13px;min-width:580px;width:100%">
-          <thead>
-            <tr style="background:var(--bg2)">
-              <th style="width:55px">ITEM</th>
-              <th>CONCEPTO</th>
-              <th style="text-align:right;width:160px">MENSUAL</th>
-              <th style="text-align:right;width:130px">COSTO HORA</th>
-            </tr>
-          </thead>
-          <tbody id="chh-adic-tbody"></tbody>
-        </table>
-      </div>
-      <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap;align-items:flex-end">
-        <div class="fg" style="max-width:140px">
-          <label>Precio comida ($)</label>
+        <div class="fg" style="max-width:150px">
+          <label>Precio comida ($/día)</label>
           <input type="number" id="chh-comida" value="10000" step="500" oninput="chhCalc()">
         </div>
-        <div class="fg" style="max-width:140px">
+        <div class="fg" style="max-width:130px">
           <label>Días/mes comida</label>
           <input type="number" id="chh-diascomida" value="21" step="1" oninput="chhCalc()">
         </div>
-        <div class="fg" style="max-width:160px">
-          <label>COPA (% del básico)</label>
+        <div class="fg" style="max-width:170px">
+          <label>COPA (% del básico/hora)</label>
           <input type="number" id="chh-copa-pct" value="70" step="1" oninput="chhCalc()">
         </div>
       </div>
     </div>
 
-    <!-- RESULTADO + MARGEN -->
-    <div class="two" style="gap:14px;align-items:start">
-      <div class="card" style="border-top:3px solid var(--green)">
-        <div class="sttl">Margen</div>
-        <p style="font-size:11px;color:var(--txm);margin:3px 0 10px">Multiplicador sobre la hora total.</p>
-        <div class="fg" style="max-width:150px">
-          <label>Margen (x)</label>
-          <input type="number" id="chh-margen" value="1.4" step="0.05" min="1" oninput="chhCalc()" style="font-size:15px;font-weight:700">
+    <div class="two" style="align-items:start;gap:14px">
+      <div>
+        <!-- TABLA PRINCIPAL -->
+        <div class="card" style="margin-bottom:14px">
+          <div style="overflow-x:auto">
+            <table style="font-size:12px;min-width:680px;width:100%">
+              <thead>
+                <tr style="background:var(--bg2)">
+                  <th style="width:50px">ITEM</th>
+                  <th>CONCEPTO</th>
+                  <th style="text-align:right;width:130px">MENSUAL</th>
+                  <th style="text-align:right;width:110px">COSTO HORA</th>
+                  <th style="text-align:right;width:100px">HORA 50%</th>
+                  <th style="text-align:right;width:100px">HORA 100%</th>
+                  <th style="text-align:right;width:90px">NOCHE 13%</th>
+                </tr>
+              </thead>
+              <tbody id="chh-tbody"></tbody>
+            </table>
+          </div>
         </div>
-        <div id="chh-margen-info" style="font-size:12px;color:var(--txm);margin-top:8px"></div>
+        <!-- ADICIONALES -->
+        <div class="card" style="margin-bottom:14px;border-top:3px solid var(--blu)">
+          <div class="sttl">Adicionales UOCRA</div>
+          <div style="overflow-x:auto;margin-top:8px">
+            <table style="font-size:12px;min-width:400px;width:100%">
+              <thead>
+                <tr style="background:var(--bg2)">
+                  <th style="width:50px">ITEM</th>
+                  <th>CONCEPTO</th>
+                  <th style="text-align:right;width:170px">MENSUAL (editable)</th>
+                  <th style="text-align:right;width:120px">COSTO HORA</th>
+                </tr>
+              </thead>
+              <tbody id="chh-adic-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
-      <div class="card" style="background:var(--redd);border:2px solid var(--red2)">
-        <div class="sttl" style="color:var(--red2)">Valor de hora final</div>
-        <div id="chh-resultado" style="margin-top:10px"></div>
+      <!-- RESULTADO -->
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="sttl">% extra (opcional)</div>
+          <p style="font-size:11px;color:var(--txm);margin:3px 0 10px">0 = sin extra, muestra la hora completa.</p>
+          <div class="fg" style="max-width:150px">
+            <label>Extra (%)</label>
+            <input type="number" id="chh-extra-pct" value="0" step="5" min="0" oninput="chhCalc()" style="font-size:15px;font-weight:700">
+          </div>
+          <div id="chh-extra-info" style="font-size:12px;color:var(--txm);margin-top:8px"></div>
+        </div>
+        <div class="card" style="background:var(--redd);border:2px solid var(--red2)">
+          <div class="sttl" style="color:var(--red2)">Valor de hora</div>
+          <div id="chh-resultado" style="margin-top:10px"></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- SUB: CATEGORÍAS UOCRA -->
+  <!-- SUB: CATEGORIAS UOCRA -->
   <div id="chh-cats" class="sp">
     <div class="card">
-      <div class="sttl" style="margin-bottom:12px">Categorías UOCRA — valor hora por categoría</div>
-      <p style="font-size:12px;color:var(--txm);margin-bottom:14px">Los factores se aplican sobre el básico calculado. Podés editar el factor o el básico de cada categoría.</p>
+      <div class="sttl" style="margin-bottom:4px">Categorías UOCRA</div>
+      <p style="font-size:12px;color:var(--txm);margin-bottom:14px">Cada categoría usa su propio básico/hora. Parámetros (porcentajes, adicionales) = los del tab Cálculo.</p>
       <div style="overflow-x:auto">
-        <table>
+        <table style="font-size:13px">
           <thead><tr>
             <th>Categoría</th>
-            <th style="text-align:right">Básico/hora</th>
+            <th style="text-align:right">Básico/h</th>
             <th style="text-align:right">Hora normal</th>
             <th style="text-align:right">Hora 50%</th>
             <th style="text-align:right">Hora 100%</th>
-            <th style="text-align:right">Nocturna +13%</th>
+            <th style="text-align:right">Nocturna</th>
             <th style="text-align:right">Jornal 9hs</th>
+            <th style="text-align:right">Hora +extra%</th>
+            <th></th>
           </tr></thead>
           <tbody id="chh-cats-tbl"></tbody>
         </table>
@@ -4148,19 +3922,18 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <!-- Tabla de operarios en obra -->
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="sttl" style="margin-bottom:0">Operarios</div>
         <button class="btn btns btnp" id="btn-chh-add-op">+ Agregar operario</button>
       </div>
       <div style="overflow-x:auto">
-        <table>
+        <table style="font-size:13px">
           <thead><tr>
             <th>Categoría</th>
             <th style="text-align:right">Cantidad</th>
             <th style="text-align:right">Costo/hora</th>
-            <th style="text-align:right">Costo día</th>
+            <th style="text-align:right">Costo/día</th>
             <th style="text-align:right">Costo total</th>
             <th></th>
           </tr></thead>
@@ -4172,18 +3945,18 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <!-- Otros costos de obra -->
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="sttl" style="margin-bottom:0">Otros costos</div>
         <button class="btn btns btnp" id="btn-chh-add-costo">+ Agregar</button>
       </div>
       <div style="overflow-x:auto">
-        <table>
+        <table style="font-size:13px">
           <thead><tr>
             <th>Concepto</th>
-            <th style="text-align:right">Importe</th>
-            <th>Factor IVA</th>
+            <th style="text-align:right">Cantidad</th>
+            <th style="text-align:right">Precio unit.</th>
+            <th style="text-align:center">Factor IVA</th>
             <th style="text-align:right">Total</th>
             <th></th>
           </tr></thead>
@@ -4195,15 +3968,14 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <!-- Resumen final -->
     <div class="two" style="align-items:start">
       <div class="card">
         <div class="sttl">Estructura de costos</div>
         <div class="fr" style="margin-top:8px">
-          <div class="fg"><label>Administrativo (%)</label><input type="number" id="chh-ob-adm" value="2" step="0.1" oninput="chhObraCalc()">%</div>
-          <div class="fg"><label>Imprevistos (%)</label><input type="number" id="chh-ob-imp" value="4" step="0.1" oninput="chhObraCalc()">%</div>
-          <div class="fg"><label>Renta bruta (%)</label><input type="number" id="chh-ob-rent" value="20" step="0.1" oninput="chhObraCalc()">%</div>
-          <div class="fg"><label>Impuestos (%)</label><input type="number" id="chh-ob-tax" value="9" step="0.1" oninput="chhObraCalc()">%</div>
+          <div class="fg"><label>Administrativo (%)</label><input type="number" id="chh-ob-adm" value="2" step="0.1" oninput="chhObraCalc()"></div>
+          <div class="fg"><label>Imprevistos (%)</label><input type="number" id="chh-ob-imp" value="4" step="0.1" oninput="chhObraCalc()"></div>
+          <div class="fg"><label>Renta bruta (%)</label><input type="number" id="chh-ob-rent" value="20" step="0.1" oninput="chhObraCalc()"></div>
+          <div class="fg"><label>Impuestos (%)</label><input type="number" id="chh-ob-tax" value="9" step="0.1" oninput="chhObraCalc()"></div>
         </div>
         <div id="chh-ob-desglose" style="margin-top:12px;font-size:13px"></div>
       </div>
@@ -4214,6 +3986,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
+
 
 
 </body>
