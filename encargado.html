@@ -105,8 +105,17 @@ html,body{min-height:100%;background:var(--bg);color:var(--tx);font-size:15px}
     </div>
 
     <div class="fg">
-      <label>Categoría UOCRA</label>
-      <input type="text" id="f-categoria" readonly placeholder="Se completa automáticamente">
+      <label>Convenio</label>
+      <select id="f-convenio">
+        <option value="">— Elegir convenio —</option>
+      </select>
+    </div>
+
+    <div class="fg">
+      <label>Categoría</label>
+      <select id="f-categoria">
+        <option value="">— Elegí un convenio primero —</option>
+      </select>
     </div>
 
     <div class="fg">
@@ -159,19 +168,29 @@ firebase.initializeApp(firebaseConfig);
 var DB = firebase.database();
 
 var isOnline = navigator.onLine;
-// S.rates se sincroniza con el tablero (Configuración > Personal > Tarifas).
+// S.convenios se sincroniza con el tablero (Personal > Tarifas).
 // Estos valores por defecto solo se usan si todavía no llegó ningún dato del tablero
 // (primer uso sin conexión). En cuanto haya jl_data disponible, se reemplazan.
 var S = {
   emp: [], obras: [], oc: [],
-  rates: [
-    { id: 'oe', l: 'Oficial Especializado', c: 14257.87, v: 15750 },
-    { id: 'of', l: 'Oficial', c: 13263.64, v: 15500 },
-    { id: 'mo', l: 'Medio Oficial', c: 11057.68, v: 11500 },
-    { id: 'ay', l: 'Ayudante', c: 10140.81, v: 10500 }
+  convenios: [
+    { id: 'uocra', l: 'UOCRA', mult: 1.5, cats: [
+      { id: 'oe', l: 'Oficial Especializado', c: 14257.87, v: 15750 },
+      { id: 'of', l: 'Oficial', c: 13263.64, v: 15500 },
+      { id: 'mo', l: 'Medio Oficial', c: 11057.68, v: 11500 },
+      { id: 'ay', l: 'Ayudante', c: 10140.81, v: 10500 }
+    ] },
+    { id: 'urgara', l: 'URGARA', mult: 1.5, cats: [] },
+    { id: 'aceitero', l: 'Aceitero', mult: 1.5, cats: [] },
+    { id: 'comercio', l: 'Comercio', mult: 1.5, cats: [] }
   ]
 };
-function getRate(cat) { return S.rates.find(function(r) { return r.id === cat; }) || null; }
+function getConvenio(convenioId) { return S.convenios.find(function(c) { return c.id === convenioId; }) || null; }
+function getCategoria(convenioId, catId) {
+  var conv = getConvenio(convenioId);
+  if (!conv) return null;
+  return conv.cats.find(function(c) { return c.id === catId; }) || null;
+}
 
 function $f(n) { return '$' + Math.round(n).toLocaleString('es-AR'); }
 function el(id) { return document.getElementById(id); }
@@ -194,7 +213,7 @@ function cargarDatos() {
     try {
       var d = JSON.parse(local);
       S.emp = d.emp||[]; S.obras = d.obras||[]; S.oc = d.oc||[];
-      if (d.rates && d.rates.length) S.rates = d.rates;
+      if (d.convenios && d.convenios.length) S.convenios = d.convenios;
     } catch(e) {}
   }
   poblarSelectores();
@@ -207,7 +226,7 @@ function cargarDatos() {
         S.emp = d.emp || [];
         S.obras = d.obras || [];
         S.oc = d.oc || [];
-        if (d.rates && d.rates.length) S.rates = d.rates;
+        if (d.convenios && d.convenios.length) S.convenios = d.convenios;
         try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
         poblarSelectores();
         calcularPreview();
@@ -236,46 +255,71 @@ function poblarSelectores() {
   }
   ocSel.innerHTML = ocOpts;
 
-  // Operarios
+  // Operarios (ya no traen categoría fija: se elige convenio + categoría en cada carga)
   var opSel = el('f-operario');
   var opOpts = '<option value="">— Seleccioná operario —</option>';
   if (S.emp && S.emp.length) {
     S.emp.forEach(function(e) {
-      var rate = getRate(e.cat);
-      var uLabel = rate ? rate.l : e.cat;
-      opOpts += '<option value="' + e.id + '" data-cat="' + e.cat + '">' + e.nombre + ' — ' + uLabel + '</option>';
+      opOpts += '<option value="' + e.id + '">' + e.nombre + (e.leg ? ' (' + e.leg + ')' : '') + '</option>';
     });
   } else {
     opOpts += '<option value="" disabled>Sin operarios cargados</option>';
   }
   opSel.innerHTML = opOpts;
+
+  // Convenio
+  var convSel = el('f-convenio');
+  if (convSel) {
+    var prevConv = convSel.value;
+    var convOpts = '<option value="">— Elegir convenio —</option>';
+    S.convenios.forEach(function(c) {
+      convOpts += '<option value="' + c.id + '"' + (c.id === prevConv ? ' selected' : '') + '>' + c.l + '</option>';
+    });
+    convSel.innerHTML = convOpts;
+    poblarCategorias(convSel.value);
+  }
 }
 
-// Auto-fill categoria and preview cost
-el('f-operario').addEventListener('change', function() {
-  var opt = this.options[this.selectedIndex];
-  var cat = opt ? opt.dataset.cat : '';
-  var rate = getRate(cat);
-  el('f-categoria').value = rate ? rate.l : '';
+// Categoría depende del convenio elegido (no del operario)
+function poblarCategorias(convenioId) {
+  var catSel = el('f-categoria');
+  if (!catSel) return;
+  var conv = getConvenio(convenioId);
+  if (!conv) {
+    catSel.innerHTML = '<option value="">— Elegí un convenio primero —</option>';
+    return;
+  }
+  if (!conv.cats.length) {
+    catSel.innerHTML = '<option value="">— Sin categorías cargadas para ' + conv.l + ' —</option>';
+    return;
+  }
+  catSel.innerHTML = '<option value="">— Seleccioná categoría —</option>' +
+    conv.cats.map(function(c) { return '<option value="' + c.id + '">' + c.l + '</option>'; }).join('');
+}
+
+el('f-convenio').addEventListener('change', function() {
+  poblarCategorias(this.value);
   calcularPreview();
 });
+el('f-categoria').addEventListener('change', calcularPreview);
 
 el('f-hn').addEventListener('input', calcularPreview);
 el('f-he').addEventListener('input', calcularPreview);
 
-// Costo por hora = tarifa configurada en el tablero (S.rates[cat].c).
-// Hora extra = costo hora normal x 1.5, igual que en la pestaña Personal del tablero.
+// Costo por hora = tarifa configurada en el tablero (Personal > Tarifas) para el
+// convenio y categoría elegidos. La hora extra usa el multiplicador propio de ese convenio.
 function calcularPreview() {
-  var opt = el('f-operario').options[el('f-operario').selectedIndex];
-  var cat = opt ? opt.dataset.cat : '';
-  var rate = getRate(cat);
-  if (!rate) { el('f-costo-preview').style.display = 'none'; return; }
+  var convenioId = el('f-convenio').value;
+  var catId = el('f-categoria').value;
+  var conv = getConvenio(convenioId);
+  var cat = getCategoria(convenioId, catId);
+  if (!conv || !cat) { el('f-costo-preview').style.display = 'none'; return; }
 
   var hn = parseFloat(el('f-hn').value) || 0;
   var he = parseFloat(el('f-he').value) || 0;
 
-  var horaBase = rate.c;
-  var horaExtra = rate.c * 1.5;
+  var horaBase = cat.c;
+  var horaExtra = cat.c * (conv.mult != null ? conv.mult : 1.5);
 
   var costoHn = horaBase * hn;
   var costoHe = horaExtra * he;
@@ -290,21 +334,26 @@ function calcularPreview() {
 function guardarRegistro() {
   var ocId     = el('f-oc').value;
   var opId     = el('f-operario').value;
+  var convenioId = el('f-convenio').value;
+  var catId    = el('f-categoria').value;
   var fecha    = el('f-fecha').value;
   var hn       = parseFloat(el('f-hn').value) || 0;
   var he       = parseFloat(el('f-he').value) || 0;
 
-  if (!ocId || !opId || !fecha) {
-    showAlert('alert-err', 'Completá obra, operario y fecha.');
+  if (!ocId || !opId || !convenioId || !catId || !fecha) {
+    showAlert('alert-err', 'Completá obra, operario, convenio, categoría y fecha.');
     return;
   }
 
-  var opt = el('f-operario').options[el('f-operario').selectedIndex];
-  var cat = opt ? opt.dataset.cat : '';
   var empNombre = S.emp.find(function(e) { return e.id === opId; });
-  var rate = getRate(cat);
-  var horaBase  = rate ? rate.c : 0;
-  var horaExtra = horaBase * 1.5;
+  var conv = getConvenio(convenioId);
+  var cat = getCategoria(convenioId, catId);
+  if (!conv || !cat) {
+    showAlert('alert-err', 'Esa categoría todavía no tiene tarifa cargada en el tablero.');
+    return;
+  }
+  var horaBase  = cat.c;
+  var horaExtra = horaBase * (conv.mult != null ? conv.mult : 1.5);
   var costoTotal = horaBase * hn + horaExtra * he;
 
   // Get obra/OC label
@@ -319,8 +368,10 @@ function guardarRegistro() {
     obraLabel: ocLabel,
     operarioId: opId,
     operarioNombre: empNombre ? empNombre.nombre : opId,
-    categoria: cat,
-    categoriaLabel: rate ? rate.l : cat,
+    convenioId: convenioId,
+    convenioLabel: conv.l,
+    categoria: catId,
+    categoriaLabel: cat.l,
     hn: hn,
     he: he,
     costoHn: Math.round(horaBase * hn),
@@ -393,7 +444,8 @@ function renderPendientes() {
 function resetForm() {
   el('f-oc').value = '';
   el('f-operario').value = '';
-  el('f-categoria').value = '';
+  el('f-convenio').value = '';
+  poblarCategorias('');
   el('f-fecha').value = today();
   el('f-hn').value = '8';
   el('f-he').value = '0';

@@ -316,7 +316,6 @@ select option{background:var(--bg2)}
           <div class="sttl">Agregar empleado</div>
           <div class="fr">
             <div class="fg" style="flex:2;min-width:140px"><label>Nombre completo</label><input type="text" id="eq-nom" placeholder="Nombre y apellido"></div>
-            <div class="fg" style="min-width:180px"><label>Categor&#237;a UOCRA</label><select id="eq-cat"></select></div>
             <div class="fg" style="min-width:120px"><label>Legajo / CUIL</label><input type="text" id="eq-leg" placeholder="Opcional"></div>
             <button class="btn btnp" id="btn-add-eq" style="align-self:flex-end">+ Agregar</button>
           </div>
@@ -344,11 +343,26 @@ select option{background:var(--bg2)}
         </div>
         <div id="pers-rep-result"></div>
       </div>
-      <!-- Tarifas UOCRA -->
+      <!-- Tarifas por convenio -->
       <div id="pers-tar" class="sp">
         <div class="card">
+          <div class="sttl">Convenio</div>
+          <div class="fr" style="margin-top:0;align-items:flex-end">
+            <div class="fg" style="min-width:200px">
+              <label>Elegir convenio</label>
+              <select id="tar-convenio" style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--br2);border-radius:8px;color:var(--tx);font-size:13px"></select>
+            </div>
+            <div class="fg" style="max-width:180px">
+              <label>Multiplicador hora extra</label>
+              <input type="number" id="tar-mult" min="1" step="0.1" style="width:100%">
+            </div>
+          </div>
+        </div>
+        <div class="card">
           <div class="sttl">Tarifas &#8212; edit&#225; el margen para recalcular precio de venta</div>
-          <table><thead><tr><th>Categor&#237;a</th><th>Costo empleador/h</th><th>Precio venta/h</th><th>Margen (%)</th></tr></thead><tbody id="rates-tbl"></tbody></table>
+          <table><thead><tr><th>Categor&#237;a</th><th>Costo empleador/h</th><th>Precio venta/h</th><th>Margen (%)</th><th></th></tr></thead><tbody id="rates-tbl"></tbody></table>
+          <div class="dvd"></div>
+          <div class="tadd"><input type="text" id="tar-nueva-cat" placeholder="Nueva categoría..." style="flex:1"><button class="btn btns btnp" id="btn-tar-add-cat">+ Agregar categoría</button></div>
         </div>
       </div>
     </div>
@@ -1056,6 +1070,19 @@ var S = {
     { id: 'mo', l: 'Medio Oficial', c: 11057.68, v: 11500 },
     { id: 'ay', l: 'Ayudante', c: 10140.81, v: 10500 }
   ],
+  // Convenios colectivos: cada uno con sus propias categorías, costo/venta por hora
+  // y multiplicador de hora extra. El encargado elige convenio + categoría al cargar horas.
+  convenios: [
+    { id: 'uocra', l: 'UOCRA', mult: 1.5, cats: [
+      { id: 'oe', l: 'Oficial Especializado', c: 14257.87, v: 15750 },
+      { id: 'of', l: 'Oficial', c: 13263.64, v: 15500 },
+      { id: 'mo', l: 'Medio Oficial', c: 11057.68, v: 11500 },
+      { id: 'ay', l: 'Ayudante', c: 10140.81, v: 10500 }
+    ] },
+    { id: 'urgara', l: 'URGARA', mult: 1.5, cats: [] },
+    { id: 'aceitero', l: 'Aceitero', mult: 1.5, cats: [] },
+    { id: 'comercio', l: 'Comercio', mult: 1.5, cats: [] }
+  ],
   obras: [], obraId: null,
   stock: [], compras: [],
   proveedores: [], oc: [],
@@ -1077,7 +1104,7 @@ var S = {
 // ═══════════════════════════════════════
 // PERSISTENCIA
 // ═══════════════════════════════════════
-function _exp() { return { emp: S.emp, obras: S.obras, stock: S.stock, compras: S.compras, rates: S.rates, db: S.db, proveedores: S.proveedores, oc: S.oc, rubros: S.rubros, ivas: S.ivas }; }
+function _exp() { return { emp: S.emp, obras: S.obras, stock: S.stock, compras: S.compras, rates: S.rates, convenios: S.convenios, db: S.db, proveedores: S.proveedores, oc: S.oc, rubros: S.rubros, ivas: S.ivas }; }
 function sv() {
   try { localStorage.setItem('jl_data', JSON.stringify(_exp())); } catch(e) {}
   try { DB.ref(FB_PATH).set(_exp()); } catch(e) {}
@@ -1087,6 +1114,7 @@ function sv() {
 function loadData(d) {
   if (d.emp) S.emp = d.emp; if (d.obras) S.obras = d.obras; if (d.stock) S.stock = d.stock;
   if (d.compras) S.compras = d.compras; if (d.rates && d.rates.length) S.rates = d.rates;
+  if (d.convenios && d.convenios.length) S.convenios = d.convenios;
   if (d.db) S.db = d.db; if (d.proveedores) S.proveedores = d.proveedores;
   if (d.oc) S.oc = d.oc; if (d.rubros) S.rubros = d.rubros; if (d.ivas) S.ivas = d.ivas;
   if (S.obras.length) S.obraId = S.obras[0].id;
@@ -1490,7 +1518,6 @@ function goSub(subId) {
 }
 
 function reBuild() {
-  var ec = el('eq-cat'); if (ec) ec.innerHTML = S.rates.map(function(r) { return '<option value="' + r.id + '">' + r.l + '</option>'; }).join('');
   var sc = el('s-cat'); if (sc) sc.innerHTML = Object.keys(S.db).map(function(k) { return '<option>' + k + '</option>'; }).join('');
   var pr = el('pm-rub'); if (pr) pr.innerHTML = '<option value="">\u2014 Sin clasificar \u2014</option>' + S.rubros.map(function(r) { return '<option>' + r + '</option>'; }).join('');
   var pf = el('p-fil'); if (pf) { var cv = pf.value; pf.innerHTML = '<option value="">Todos los rubros</option>' + S.rubros.map(function(r) { return '<option' + (r === cv ? ' selected' : '') + '>' + r + '</option>'; }).join(''); }
@@ -1769,15 +1796,40 @@ function rPers() {
   // Por obra
   rPersObra();
 
-  // Tarifas
-  var rateRows = S.rates.map(function(r, i) {
+  // Tarifas por convenio
+  rTarifas();
+}
+
+var tarConvenioActivo = (S.convenios[0] || {}).id || '';
+
+function tarGetConvenio() {
+  return S.convenios.find(function(c) { return c.id === tarConvenioActivo; }) || S.convenios[0];
+}
+
+function rTarifas() {
+  var selConv = el('tar-convenio');
+  if (selConv) {
+    if (!S.convenios.some(function(c) { return c.id === tarConvenioActivo; })) {
+      tarConvenioActivo = (S.convenios[0] || {}).id || '';
+    }
+    selConv.innerHTML = S.convenios.map(function(c) {
+      return '<option value="' + c.id + '"' + (c.id === tarConvenioActivo ? ' selected' : '') + '>' + c.l + '</option>';
+    }).join('');
+  }
+  var conv = tarGetConvenio();
+  if (!conv) return;
+  var multEl = el('tar-mult');
+  if (multEl) multEl.value = conv.mult != null ? conv.mult : 1.5;
+
+  var rateRows = conv.cats.map(function(r, i) {
     var m = r.c > 0 ? ((r.v - r.c) / r.c * 100).toFixed(1) : 0;
     return '<tr><td style="font-weight:600">' + r.l + '</td>' +
       '<td><input type="number" class="rate-c" data-i="' + i + '" value="' + r.c + '" min="0"></td>' +
       '<td><input type="number" class="rate-v" data-i="' + i + '" value="' + r.v + '" min="0"></td>' +
-      '<td><input type="number" class="rate-m" data-i="' + i + '" value="' + m + '" min="0" step="0.1" style="width:80px"><span style="margin-left:4px;color:var(--txm);font-size:12px">%</span></td></tr>';
+      '<td><input type="number" class="rate-m" data-i="' + i + '" value="' + m + '" min="0" step="0.1" style="width:80px"><span style="margin-left:4px;color:var(--txm);font-size:12px">%</span></td>' +
+      '<td><button class="btn btns btnd del-tar-cat" data-i="' + i + '">✕</button></td></tr>';
   }).join('');
-  if (el('rates-tbl')) el('rates-tbl').innerHTML = rateRows;
+  if (el('rates-tbl')) el('rates-tbl').innerHTML = rateRows || '<tr><td colspan="5" style="color:var(--txm)">Sin categorías cargadas todavía para este convenio.</td></tr>';
 }
 
 function rPersObra() {
@@ -1845,10 +1897,6 @@ function rPersObra() {
 // PERSONAL — EQUIPO
 // ═══════════════════════════════════════
 function rEq() {
-  // Poblar select de categorías
-  var ec = el('eq-cat');
-  if (ec) ec.innerHTML = S.rates.map(function(r) { return '<option value="' + r.id + '">' + r.l + '</option>'; }).join('');
-
   // KPIs
   var kpi = el('kpi-eq');
   if (kpi) kpi.innerHTML =
@@ -1862,24 +1910,23 @@ function rEq() {
     return;
   }
   var rows = S.emp.map(function(e) {
-    var catNombre = (S.rates.find(function(r) { return r.id === e.cat; }) || S.rates[0] || {}).l || e.cat;
     return '<tr>' +
       '<td style="font-weight:600">' + e.nombre + '</td>' +
-      '<td><span class="bdgy">' + catNombre + '</span></td>' +
       '<td style="color:var(--txm);font-size:12px">' + (e.leg || '—') + '</td>' +
       '<td><button class="btn btns btnd del-eq" data-id="' + e.id + '">✕</button></td>' +
       '</tr>';
   }).join('');
   tbl.innerHTML = '<div style="overflow-x:auto"><table>' +
-    '<thead><tr><th>Nombre</th><th>Categoría UOCRA</th><th>Legajo / CUIL</th><th></th></tr></thead>' +
+    '<thead><tr><th>Nombre</th><th>Legajo / CUIL</th><th></th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table></div>';
 }
 
 function addEq() {
   var n = (el('eq-nom') || {}).value; if (!n || !n.trim()) return;
-  var cat = (el('eq-cat') || {}).value || (S.rates[0] || {}).id || '';
   var leg = (el('eq-leg') || {}).value || '';
-  S.emp.push({ id: uid(), nombre: n.trim(), cat: cat, leg: leg.trim() });
+  // La categoría y el convenio ya no se fijan acá: los elige el encargado
+  // en cada carga de horas (pueden variar según el trabajo asignado).
+  S.emp.push({ id: uid(), nombre: n.trim(), leg: leg.trim() });
   el('eq-nom').value = ''; if (el('eq-leg')) el('eq-leg').value = '';
   sv(); rEq(); rDash();
 }
@@ -2545,11 +2592,16 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('change', function(e) {
     var t = e.target;
     if (t.classList.contains('rate-c')) {
-      S.rates[+t.dataset.i].c = +t.value; sv(); rPers(); rDash();
+      var conv1 = tarGetConvenio(); if (conv1) { conv1.cats[+t.dataset.i].c = +t.value; sv(); rPers(); rDash(); }
     } else if (t.classList.contains('rate-v')) {
-      S.rates[+t.dataset.i].v = +t.value; sv(); rPers(); rDash();
+      var conv2 = tarGetConvenio(); if (conv2) { conv2.cats[+t.dataset.i].v = +t.value; sv(); rPers(); rDash(); }
     } else if (t.classList.contains('rate-m')) {
-      var i = +t.dataset.i; S.rates[i].v = Math.round(S.rates[i].c * (1 + (+t.value / 100))); sv(); rPers(); rDash();
+      var conv3 = tarGetConvenio(); var i = +t.dataset.i;
+      if (conv3) { conv3.cats[i].v = Math.round(conv3.cats[i].c * (1 + (+t.value / 100))); sv(); rPers(); rDash(); }
+    } else if (t.id === 'tar-convenio') {
+      tarConvenioActivo = t.value; rTarifas();
+    } else if (t.id === 'tar-mult') {
+      var conv4 = tarGetConvenio(); if (conv4) { conv4.mult = +t.value || 1.5; sv(); }
     } else if (t.classList.contains('obra-txt')) {
       if (!S.obraId) return;
       var f = t.dataset.f;
@@ -2646,6 +2698,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (t.id === 'btn-add-dbcat') { var n2 = el('dbc-n').value.trim(); if (!n2 || S.db[n2]) { if (n2 && S.db[n2]) alert('Ya existe.'); return; } S.db[n2] = []; S.dbCat = n2; el('dbc-n').value = ''; sv(); rDB(); reBuild(); return; }
     if (t.id === 'btn-add-dbit') { var cat2 = t.dataset.cat, n3 = el('dbi-n').value.trim(); if (!n3) return; S.db[cat2].push({ n: n3, a: +el('dbi-a').value || 1, c: +el('dbi-c').value || 0 }); el('dbi-n').value = ''; sv(); rDB(); return; }
     if (t.id === 'btn-add-cat') { var n4 = el('cfg-cn').value.trim(); if (!n4) return; S.rates.push({ id: uid(), l: n4, c: 0, v: 0 }); el('cfg-cn').value = ''; sv(); rCfg(); reBuild(); rPers(); return; }
+    if (t.id === 'btn-tar-add-cat') {
+      var n5 = (el('tar-nueva-cat') || {}).value || ''; n5 = n5.trim(); if (!n5) return;
+      var convA = tarGetConvenio(); if (!convA) return;
+      convA.cats.push({ id: uid(), l: n5, c: 0, v: 0 });
+      el('tar-nueva-cat').value = ''; sv(); rTarifas(); return;
+    }
+    if (t.classList.contains('del-tar-cat')) {
+      var convB = tarGetConvenio(); if (!convB) return;
+      var iB = +t.dataset.i; convB.cats.splice(iB, 1); sv(); rTarifas(); return;
+    }
     if (t.id === 'btn-add-rprov') { var n5 = el('cfg-rpn').value.trim(); if (!n5 || S.rubros.indexOf(n5) >= 0) return; S.rubros.push(n5); el('cfg-rpn').value = ''; sv(); rCfg(); reBuild(); return; }
     if (t.id === 'btn-add-rmat') { var n6 = el('cfg-rmn').value.trim(); if (!n6 || S.db[n6]) return; S.db[n6] = []; el('cfg-rmn').value = ''; sv(); rCfg(); reBuild(); return; }
     if (t.id === 'btn-add-iva') { var n7 = el('cfg-ivn').value.trim(); if (!n7 || S.ivas.indexOf(n7) >= 0) return; S.ivas.push(n7); el('cfg-ivn').value = ''; sv(); rCfg(); reBuild(); return; }
