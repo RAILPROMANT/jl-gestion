@@ -248,9 +248,7 @@ select option{background:var(--bg2)}
     <div class="nb" data-tab="mat">Materiales</div>
     <div class="nb" data-tab="prov">Clientes</div>
     <div class="nb" data-tab="gpres">Presupuestos</div>
-    <div class="nb" data-tab="valorhora">Cálculo Valor Hora</div>
     <div class="nb" data-tab="cfg">Configuraci&#243;n</div>
-    <div class="nb" data-tab="calchora">C&#225;lculo Hora</div>
     <div class="nb" data-tab="horas">Horas obra</div>
     <div class="nb" data-tab="costohh">Costo HH</div>
   </div>
@@ -606,49 +604,6 @@ select option{background:var(--bg2)}
       <div id="gpres-bdb" class="sp"><div id="gp-db-panel"></div></div>
     </div>
 
-    <div id="valorhora" class="page">
-      <div class="card" style="margin-bottom:14px"><div class="sttl" style="margin-bottom:12px">Empresas y Factor COPA</div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Empresa</th><th style="text-align:right">% COPA</th><th style="text-align:right">Factor</th><th></th></tr></thead><tbody id="vh-emp-body"></tbody></table></div>
-        <button class="btn btns" style="margin-top:10px" onclick="vhAgregarEmpresa()">+ Agregar empresa</button>
-      </div>
-      <div class="two" style="gap:14px;margin-bottom:14px">
-        <div class="card"><div class="sttl" style="margin-bottom:12px">Valores base</div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <div class="fg"><label>Hora básica (ARS)</label><input type="number" id="vh-hora-basica" value="5268" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Cargas sociales (%)</label><input type="number" id="vh-cargas" value="45" step="0.1" oninput="vhCalcular()"></div>
-          </div>
-        </div>
-        <div class="card"><div class="sttl" style="margin-bottom:12px">Adicionales ($/hora)</div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <div class="fg"><label>Revisión médica (mensual)</label><input type="number" id="vh-rev-med" value="270000" oninput="vhCalcular()"><span style="font-size:11px;color:var(--txm)">/180/9</span></div>
-            <div class="fg"><label>Fondo desempleo</label><input type="number" id="vh-fondo" value="1.2" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Aguinaldo</label><input type="number" id="vh-aguinaldo" value="60" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>EPP</label><input type="number" id="vh-epp" value="80.22" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Vianda</label><input type="number" id="vh-vianda" value="88.8" step="0.01" oninput="vhCalcular()"></div>
-            <div class="fg"><label>Agua</label><input type="number" id="vh-agua" value="185" step="0.01" oninput="vhCalcular()"></div>
-          </div>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:14px"><div class="sttl" style="margin-bottom:10px">Detalle adicionales</div>
-        <div class="totbox">
-          <div class="trow"><span>Revisión médica</span><span id="vh-d-revmed">$0</span></div>
-          <div class="trow"><span>Fondo desempleo</span><span id="vh-d-fondo">$0</span></div>
-          <div class="trow"><span>Aguinaldo</span><span id="vh-d-aguinaldo">$0</span></div>
-          <div class="trow"><span>EPP</span><span id="vh-d-epp">$0</span></div>
-          <div class="trow"><span>Vianda</span><span id="vh-d-vianda">$0</span></div>
-          <div class="trow"><span>Agua</span><span id="vh-d-agua">$0</span></div>
-          <div class="trow fin"><span>Total adicionales</span><span id="vh-d-total">$0</span></div>
-        </div>
-      </div>
-      <div class="card"><div class="sttl" style="margin-bottom:12px">Resultado por empresa</div>
-        <div style="overflow-x:auto"><table><thead><tr>
-          <th>Empresa</th><th style="text-align:right">Hora base</th><th style="text-align:right">+COPA</th>
-          <th style="text-align:right">+Cargas</th><th style="text-align:right">+Adic.</th>
-          <th style="text-align:right;color:var(--red2)">HORA COPA</th>
-          <th style="text-align:right;color:var(--blu)">HORA VIA</th>
-        </tr></thead><tbody id="vh-result-body"></tbody></table></div>
-      </div>
-    </div>
 
     <div id="cfg" class="page">
       <div style="font-size:13px;color:var(--txm);margin-bottom:14px">Gestion&#225; todos los men&#250;s desplegables del sistema.</div>
@@ -2917,9 +2872,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // ═══ CLICKS ═══
   document.addEventListener('click',function(e){var t=e.target;if(!t)return;
     if(t.dataset&&t.dataset.tab==='gpres'){setTimeout(function(){gpLoad();gpRenderTable();gpRenderHist();gpSegRender();gpDbRender();gpDbPopulateSelects();gpPopulateCliSel();rDash();},60);return;}
-    if(t.dataset&&t.dataset.tab==='calchora'){setTimeout(function(){uocraRenderTabla();chRecalcAll();},60);return;} if(t.dataset&&t.dataset.tab==='costohh'){setTimeout(function(){if(typeof chhCalc==='function')chhCalc();if(typeof chhRenderCats==='function')chhRenderCats();},60);return;}
+    if(t.dataset&&t.dataset.tab==='costohh'){setTimeout(function(){if(typeof chhCalc==='function')chhCalc();if(typeof chhRenderCats==='function')chhRenderCats();},60);return;}
     if(t.dataset&&t.dataset.tab==='horas'){setTimeout(function(){horasCargar();},60);return;}
-    if(t.dataset&&t.dataset.tab==='valorhora'){setTimeout(function(){vhRenderEmpresas();vhCalcular();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-seg'){setTimeout(function(){gpSegRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-bdb'){setTimeout(function(){gpDbRender();},60);return;}
     if(t.dataset&&t.dataset.sub==='gpres-form'){setTimeout(function(){gpDbPopulateSelects();},60);return;}
@@ -3747,89 +3701,6 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 <div id="pdfprev" style="display:none;position:fixed;top:0;left:0;width:100%;background:#fff;z-index:9999;overflow:auto"></div>
-<div id="calchora" class="page">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-    <!-- DATOS BASE -->
-    <div class="card">
-      <div class="sttl">Datos base del convenio</div>
-      <div class="fr" style="flex-direction:column;gap:10px;margin-top:0">
-        <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>Horas mensuales</label><input type="number" id="ch-horas-mens" value="176" oninput="chRecalcAll()"><span style="font-size:11px;color:var(--txm)">176=conv. / 189=agro</span></div>
-          <div class="fg" style="flex:1"><label>Horas diarias</label><input type="number" id="ch-hd" value="9" oninput="chRecalcAll()"></div>
-        </div>
-        <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>D&#237;as por semestre (rev. m&#233;d.)</label><input type="number" id="ch-dsem" value="180" oninput="chRecalcAll()"></div>
-          <div class="fg" style="flex:1"><label>Revis. m&#233;dica ($/mes)</label><input type="number" id="ch-rm" value="300000" oninput="chRecalcAll()"></div>
-        </div>
-      </div>
-    </div>
-    <!-- ADICIONALES POR HORA -->
-    <div class="card">
-      <div class="sttl">Adicionales por hora (UOCRA)</div>
-      <div class="fr" style="flex-direction:column;gap:10px;margin-top:0">
-        <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>EPP y ropa ($/h)</label><input type="number" id="ch-epp" value="568.18" step="0.01" oninput="chRecalcAll()"></div>
-          <div class="fg" style="flex:1"><label>Adicional zona A ($/h)</label><input type="number" id="ch-zona" value="284.09" step="0.01" oninput="chRecalcAll()"></div>
-        </div>
-        <div class="fr" style="margin-top:0">
-          <div class="fg" style="flex:1"><label>Comidas UOCRA ($/h)</label><input type="number" id="ch-comidas" value="1014.20" step="0.01" oninput="chRecalcAll()"></div>
-          <div class="fg" style="flex:1"><label>Preocupacionales ($/h)</label><input type="number" id="ch-preocup" value="568.18" step="0.01" oninput="chRecalcAll()"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- APERTURA DE COSTOS -->
-  <div class="card" style="margin-bottom:14px">
-    <div class="sttl" style="margin-bottom:10px">Apertura de costos por categor&#237;a</div>
-    <p style="font-size:12px;color:var(--txm);margin-bottom:12px">Estructura según convenio UOCRA / Agro Exportador. A=básico+presentismo → B=cargas tiempo libre → C=cargas patronales → D=despido+IERIC → + adicionales</p>
-    <div id="ch-uocra-costo"></div>
-  </div>
-
-  <!-- PRECIO DE VENTA -->
-  <div class="card" style="margin-bottom:14px">
-    <div class="sttl" style="margin-bottom:12px">Precio de venta</div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-      <div class="fg" style="max-width:200px">
-        <label>% Ganancia deseada</label>
-        <input type="number" id="ch-gan-pct" value="30" min="0" step="1" oninput="chCalcularGanancia()">
-      </div>
-      <div class="fg" style="max-width:220px">
-        <label>% Extra sobre hora (0 = hora completa)</label>
-        <input type="number" id="ch-extra-pct" value="0" min="0" step="1" oninput="chCalcularGanancia()" placeholder="ej: 40">
-        <span style="font-size:11px;color:var(--txm)">Con 40 → "hora más el 40%"</span>
-      </div>
-    </div>
-    <div id="ch-ganancia-resultado"></div>
-  </div>
-
-  <!-- COMPARATIVO UOCRA vs NUESTRO COSTO -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-      <div>
-        <div class="sttl" style="margin-bottom:2px">UOCRA vs Nuestro costo</div>
-        <div style="font-size:11px;color:var(--txm)">Ingres&#225; las tarifas que cobra UOCRA al cliente por categor&#237;a para ver la ganancia</div>
-      </div>
-      <button class="btn btns btnp" onclick="chRecalcAll()">&#8635; Actualizar</button>
-    </div>
-    <div style="margin-bottom:14px">
-      <div class="sttl" style="margin-bottom:8px">Categorías UOCRA — b&#225;sicos editables</div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr>
-            <th>Categor&#237;a</th>
-            <th style="text-align:right">B&#225;sico UOCRA ($)</th>
-            <th style="text-align:right">Tarifa COPA cliente ($/h)</th>
-            <th style="text-align:right">Tarifa V&#237;a cliente ($/h)</th>
-          </tr></thead>
-          <tbody id="uocra-body"></tbody>
-        </table>
-      </div>
-    </div>
-    <div id="uocra-resultado"></div>
-  </div>
-</div>
-
 <div id="horas" class="page">
   <div class="kpis" id="horas-kpis" style="margin-bottom:14px"></div>
   <div class="two">
