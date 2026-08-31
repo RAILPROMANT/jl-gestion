@@ -159,13 +159,19 @@ firebase.initializeApp(firebaseConfig);
 var DB = firebase.database();
 
 var isOnline = navigator.onLine;
-var S = { emp: [], obras: [], oc: [] };
-var UOCRA_CATS = {
-  'oe': { label: 'Of. Especializado', basico: 5470 },
-  'of': { label: 'Oficial',           basico: 4679 },
-  'mo': { label: 'Medio Oficial',     basico: 4324 },
-  'ay': { label: 'Ayudante',          basico: 3980 }
+// S.rates se sincroniza con el tablero (Configuración > Personal > Tarifas).
+// Estos valores por defecto solo se usan si todavía no llegó ningún dato del tablero
+// (primer uso sin conexión). En cuanto haya jl_data disponible, se reemplazan.
+var S = {
+  emp: [], obras: [], oc: [],
+  rates: [
+    { id: 'oe', l: 'Oficial Especializado', c: 14257.87, v: 15750 },
+    { id: 'of', l: 'Oficial', c: 13263.64, v: 15500 },
+    { id: 'mo', l: 'Medio Oficial', c: 11057.68, v: 11500 },
+    { id: 'ay', l: 'Ayudante', c: 10140.81, v: 10500 }
+  ]
 };
+function getRate(cat) { return S.rates.find(function(r) { return r.id === cat; }) || null; }
 
 function $f(n) { return '$' + Math.round(n).toLocaleString('es-AR'); }
 function el(id) { return document.getElementById(id); }
@@ -185,20 +191,28 @@ function cargarDatos() {
   el('f-fecha').value = today();
   var local = localStorage.getItem('jl_data');
   if (local) {
-    try { var d = JSON.parse(local); S.emp = d.emp||[]; S.obras = d.obras||[]; S.oc = d.oc||[]; } catch(e) {}
+    try {
+      var d = JSON.parse(local);
+      S.emp = d.emp||[]; S.obras = d.obras||[]; S.oc = d.oc||[];
+      if (d.rates && d.rates.length) S.rates = d.rates;
+    } catch(e) {}
   }
   poblarSelectores();
   if (isOnline) {
-    DB.ref('jl_data').once('value').then(function(snap) {
+    // Escucha en tiempo real: si cambian las tarifas o el personal en el tablero,
+    // este formulario siempre calcula con los valores más recientes.
+    DB.ref('jl_data').on('value', function(snap) {
       var d = snap.val();
       if (d) {
         S.emp = d.emp || [];
         S.obras = d.obras || [];
         S.oc = d.oc || [];
+        if (d.rates && d.rates.length) S.rates = d.rates;
         try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
         poblarSelectores();
+        calcularPreview();
       }
-    }).catch(function() {});
+    }, function() {});
   }
 }
 
@@ -227,7 +241,8 @@ function poblarSelectores() {
   var opOpts = '<option value="">— Seleccioná operario —</option>';
   if (S.emp && S.emp.length) {
     S.emp.forEach(function(e) {
-      var uLabel = UOCRA_CATS[e.cat] ? UOCRA_CATS[e.cat].label : e.cat;
+      var rate = getRate(e.cat);
+      var uLabel = rate ? rate.l : e.cat;
       opOpts += '<option value="' + e.id + '" data-cat="' + e.cat + '">' + e.nombre + ' — ' + uLabel + '</option>';
     });
   } else {
@@ -240,29 +255,27 @@ function poblarSelectores() {
 el('f-operario').addEventListener('change', function() {
   var opt = this.options[this.selectedIndex];
   var cat = opt ? opt.dataset.cat : '';
-  var uCat = UOCRA_CATS[cat];
-  el('f-categoria').value = uCat ? uCat.label : '';
+  var rate = getRate(cat);
+  el('f-categoria').value = rate ? rate.l : '';
   calcularPreview();
 });
 
 el('f-hn').addEventListener('input', calcularPreview);
 el('f-he').addEventListener('input', calcularPreview);
 
+// Costo por hora = tarifa configurada en el tablero (S.rates[cat].c).
+// Hora extra = costo hora normal x 1.5, igual que en la pestaña Personal del tablero.
 function calcularPreview() {
   var opt = el('f-operario').options[el('f-operario').selectedIndex];
   var cat = opt ? opt.dataset.cat : '';
-  var uCat = UOCRA_CATS[cat];
-  if (!uCat) { el('f-costo-preview').style.display = 'none'; return; }
+  var rate = getRate(cat);
+  if (!rate) { el('f-costo-preview').style.display = 'none'; return; }
 
-  var basico = uCat.basico;
-  var cs = 0.45;
   var hn = parseFloat(el('f-hn').value) || 0;
   var he = parseFloat(el('f-he').value) || 0;
 
-  // Hora normal = basico * (1 + CS) + adicionales fijos
-  var adicFijos = 80.22 + 88.8 + 185 + 60; // EPP + vianda + agua + aguinaldo
-  var horaBase = basico * (1 + cs) + adicFijos;
-  var horaExtra = horaBase * 2; // horas extras al 100%
+  var horaBase = rate.c;
+  var horaExtra = rate.c * 1.5;
 
   var costoHn = horaBase * hn;
   var costoHe = horaExtra * he;
@@ -289,12 +302,9 @@ function guardarRegistro() {
   var opt = el('f-operario').options[el('f-operario').selectedIndex];
   var cat = opt ? opt.dataset.cat : '';
   var empNombre = S.emp.find(function(e) { return e.id === opId; });
-  var uCat = UOCRA_CATS[cat];
-  var basico = uCat ? uCat.basico : 5470;
-  var cs = 0.45;
-  var adicFijos = 80.22 + 88.8 + 185 + 60;
-  var horaBase  = basico * (1 + cs) + adicFijos;
-  var horaExtra = horaBase * 2;
+  var rate = getRate(cat);
+  var horaBase  = rate ? rate.c : 0;
+  var horaExtra = horaBase * 1.5;
   var costoTotal = horaBase * hn + horaExtra * he;
 
   // Get obra/OC label
@@ -310,7 +320,7 @@ function guardarRegistro() {
     operarioId: opId,
     operarioNombre: empNombre ? empNombre.nombre : opId,
     categoria: cat,
-    categoriaLabel: uCat ? uCat.label : cat,
+    categoriaLabel: rate ? rate.l : cat,
     hn: hn,
     he: he,
     costoHn: Math.round(horaBase * hn),

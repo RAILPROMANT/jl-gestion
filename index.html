@@ -1118,6 +1118,8 @@ function iniciarApp() {
       if (dg) { if (dg.params) GP.params = dg.params; if (dg.historial) GP.historial = dg.historial; if (dg.nroActual) GP.nroActual = dg.nroActual; }
       var gnro = el('gp-nro'); if (gnro) gnro.value = 'P-' + String(GP.nroActual).padStart(5, '0');
       reBuild(); renderAll();
+      // Activar listener en tiempo real de horas cargadas por el encargado
+      horasCargar();
       // Firebase realtime listener - se dispara cada vez que cambian los datos
       // Poll every 5 seconds - simple and reliable
       setInterval(function() {
@@ -1370,16 +1372,19 @@ function chCalcularUOCRA() {
 // HORAS OBRA
 // ═══════════════════════════════════════
 var horasData = {};
+var horasListenerActivo = false;
 
 function horasCargar() {
-  DB.ref('jl_horas').once('value').then(function(snap) {
+  // Si el listener en tiempo real ya está activo, solo re-renderizamos con lo que ya tenemos
+  if (horasListenerActivo) { horasRender(); return; }
+  horasListenerActivo = true;
+  DB.ref('jl_horas').on('value', function(snap) {
     horasData = snap.val() || {};
-    horasRender();
-  }).catch(function() {});
-  // Listen realtime
-  DB.ref('jl_horas').once('value').then(function(snap) {
-    horasData = snap.val() || {};
-    horasRender();
+    try { rDash(); } catch(e) {}
+    try { rPers(); } catch(e) {}
+    try { horasRender(); } catch(e) {}
+  }, function(err) {
+    horasListenerActivo = false;
   });
 }
 
@@ -1423,11 +1428,13 @@ function horasRender() {
   }
 
   // Table
+  var tablaEl = el('horas-tabla');
+  if (!tablaEl) return;
   if (!todos.length) {
-    el('horas-tabla').innerHTML = '<div class="empty">Sin registros de horas</div>';
+    tablaEl.innerHTML = '<div class="empty">Sin registros de horas</div>';
     return;
   }
-  el('horas-tabla').innerHTML = '<div style="overflow-x:auto"><table>' +
+  tablaEl.innerHTML = '<div style="overflow-x:auto"><table>' +
     '<thead><tr><th>Fecha</th><th>Obra/OC</th><th>Operario</th><th>Categor&#237;a</th>' +
     '<th style="text-align:right">Hn</th><th style="text-align:right">He</th>' +
     '<th style="text-align:right">Costo Hn</th><th style="text-align:right">Costo He</th>' +
