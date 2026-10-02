@@ -1155,6 +1155,8 @@ function iniciarApp() {
   ['c-fec', 'oc-fec', 'gp-fec'].forEach(function(id) { var e = el(id); if (e) e.value = today; });
   ['rep-desde', 'mr-desde'].forEach(function(id) { var e = el(id); if (e) e.value = today.slice(0, 8) + '01'; });
   ['rep-hasta', 'mr-hasta'].forEach(function(id) { var e = el(id); if (e) e.value = today; });
+  // Horas del encargado: se escuchan en vivo desde el arranque, sin depender del resto de la carga
+  try { horasCargar(); } catch(eH) {}
   // Load from Firebase, fallback to localStorage
   DB.ref(FB_PATH).once('value').then(function(snap) {
     var fd = snap.val();
@@ -1433,6 +1435,8 @@ function horasCargar() {
     try { horasRender(); } catch(e) {}
   }, function(err) {
     horasListenerActivo = false;
+    var t = el('horas-tabla');
+    if (t) t.innerHTML = '<div class="empty" style="color:var(--red2)">No se pudieron leer las horas desde Firebase (' + ((err && (err.code || err.message)) || 'error') + ').<br>Revis\u00e1 las reglas de la base de datos: tienen que permitir leer y escribir en <strong>jl_horas</strong>.</div>';
   });
 }
 
