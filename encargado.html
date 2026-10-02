@@ -79,23 +79,17 @@ html,body{min-height:100%;background:var(--bg);color:var(--tx);font-size:15px}
     </div>
   </div>
   <div class="offline-badge" id="offline-badge">Sin conexión</div>
+  <div id="fb-badge" style="font-size:11px;font-weight:700;border-radius:99px;padding:4px 10px;background:rgba(255,255,255,.06);color:var(--txm)">Conectando…</div>
 </div>
 
 <div class="body">
 
   <div id="alert-ok" class="alert-ok">✓ Registro guardado correctamente</div>
-  <div id="alert-err" class="alert-err" id="alert-err"></div>
+  <div id="alert-err" class="alert-err"></div>
   <div id="alert-offline" class="alert-offline">⚠ Sin internet — guardado localmente. Se sincronizará al reconectarse.</div>
 
   <div class="card">
     <div class="sttl">Nuevo registro de horas</div>
-
-    <div class="fg">
-      <label>Orden de compra / Obra</label>
-      <select id="f-oc">
-        <option value="">— Cargando obras... —</option>
-      </select>
-    </div>
 
     <div class="fg">
       <label>Operario</label>
@@ -149,6 +143,8 @@ html,body{min-height:100%;background:var(--bg);color:var(--tx);font-size:15px}
   <div class="card" id="card-pending" style="display:none">
     <div class="sttl">Pendientes de sincronizar (<span id="pending-count">0</span>)</div>
     <div id="pending-list"></div>
+    <div id="pending-err" style="font-size:12px;color:var(--red2);margin:6px 0 10px"></div>
+    <button class="btn-save" style="background:#333;font-size:14px;padding:12px" onclick="syncPending(true)">&#8635; Reintentar envío al tablero</button>
   </div>
 
 </div>
@@ -194,7 +190,7 @@ function getCategoria(convenioId, catId) {
 
 function $f(n) { return '$' + Math.round(n).toLocaleString('es-AR'); }
 function el(id) { return document.getElementById(id); }
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 // Offline detection
@@ -231,30 +227,19 @@ function cargarDatos() {
         poblarSelectores();
         calcularPreview();
       }
-    }, function() {});
+    }, function(err) {
+      showAlert('alert-err', 'No se pudieron leer obras y operarios del tablero (' + ((err && (err.code || err.message)) || 'error') + ').', true);
+    });
   }
+  // Indicador de conexión real con la base de datos del tablero
+  DB.ref('.info/connected').on('value', function(s) {
+    var b = el('fb-badge'); if (!b) return;
+    if (s.val() === true) { b.textContent = '● Conectado al tablero'; b.style.color = 'var(--grn)'; b.style.background = 'var(--grnd)'; syncPending(); }
+    else { b.textContent = '● Sin conexión al tablero'; b.style.color = '#f59e0b'; b.style.background = 'rgba(245,158,11,.12)'; }
+  });
 }
 
 function poblarSelectores() {
-  // Obras/OC
-  var ocSel = el('f-oc');
-  var ocOpts = '<option value="">— Seleccioná obra/OC —</option>';
-
-  // Usar OC si hay, sino obras
-  if (S.oc && S.oc.length) {
-    S.oc.forEach(function(oc) {
-      var label = (oc.nro || 'OC') + (oc.desc ? ' — ' + oc.desc : '');
-      ocOpts += '<option value="' + oc.id + '">' + label + '</option>';
-    });
-  } else if (S.obras && S.obras.length) {
-    S.obras.forEach(function(o) {
-      ocOpts += '<option value="' + o.id + '">' + (o.nombre || o.id) + (o.cliente ? ' (' + o.cliente + ')' : '') + '</option>';
-    });
-  } else {
-    ocOpts += '<option value="" disabled>Sin obras cargadas</option>';
-  }
-  ocSel.innerHTML = ocOpts;
-
   // Operarios (ya no traen categoría fija: se elige convenio + categoría en cada carga)
   var opSel = el('f-operario');
   var opOpts = '<option value="">— Seleccioná operario —</option>';
@@ -332,7 +317,6 @@ function calcularPreview() {
 }
 
 function guardarRegistro() {
-  var ocId     = el('f-oc').value;
   var opId     = el('f-operario').value;
   var convenioId = el('f-convenio').value;
   var catId    = el('f-categoria').value;
@@ -340,8 +324,8 @@ function guardarRegistro() {
   var hn       = parseFloat(el('f-hn').value) || 0;
   var he       = parseFloat(el('f-he').value) || 0;
 
-  if (!ocId || !opId || !convenioId || !catId || !fecha) {
-    showAlert('alert-err', 'Completá obra, operario, convenio, categoría y fecha.');
+  if (!opId || !convenioId || !catId || !fecha) {
+    showAlert('alert-err', 'Completá operario, convenio, categoría y fecha.');
     return;
   }
 
@@ -356,16 +340,16 @@ function guardarRegistro() {
   var horaExtra = horaBase * (conv.mult != null ? conv.mult : 1.5);
   var costoTotal = horaBase * hn + horaExtra * he;
 
-  // Get obra/OC label
-  var ocOpt = el('f-oc').options[el('f-oc').selectedIndex];
-  var ocLabel = ocOpt ? ocOpt.text : ocId;
+  if (hn <= 0 && he <= 0) {
+    showAlert('alert-err', 'Cargá al menos una hora normal o extra.');
+    return;
+  }
 
   var registro = {
     id: uid(),
     timestamp: Date.now(),
     fecha: fecha,
-    obraId: ocId,
-    obraLabel: ocLabel,
+    mes: fecha.slice(0, 7),
     operarioId: opId,
     operarioNombre: empNombre ? empNombre.nombre : opId,
     convenioId: convenioId,
@@ -388,10 +372,10 @@ function guardarRegistro() {
   if (isOnline) {
     subirRegistro(registro, function(ok) {
       if (ok) {
-        showAlert('alert-ok', '✓ Registro guardado y sincronizado.');
+        showAlert('alert-ok', '✓ Registro guardado y enviado al tablero.');
         resetForm();
       } else {
-        showAlert('alert-offline', '⚠ Guardado localmente. Se sincronizará al reconectarse.');
+        showAlert('alert-err', '✗ No llegó al tablero: ' + (ultimoError || 'error desconocido') + '. Quedó guardado en el celular; abajo podés reintentar.', true);
         resetForm();
       }
       renderPendientes();
@@ -403,22 +387,43 @@ function guardarRegistro() {
   }
 }
 
+var ultimoError = '';
 function subirRegistro(reg, cb) {
-  DB.ref('jl_horas/' + reg.obraId + '/' + reg.id).set(reg)
+  var listo = false;
+  // Si Firebase no responde en 15 s, se avisa (queda pendiente y se reintenta solo)
+  var to = setTimeout(function() { if (!listo) { listo = true; ultimoError = 'sin respuesta del servidor'; if (cb) cb(false); } }, 15000);
+  var reg2 = JSON.parse(JSON.stringify(reg)); reg2.sincronizado = true;
+  // Se guarda agrupado por mes (jl_horas/AAAA-MM/id). Registros viejos conservan su obra.
+  var grupo = reg.obraId || reg.mes || (reg.fecha || '').slice(0, 7) || 'sin_fecha';
+  DB.ref('jl_horas/' + grupo + '/' + reg.id).set(reg2)
     .then(function() {
       // Mark as synced in local
       var pend = getPendientes().filter(function(r) { return r.id !== reg.id; });
       localStorage.setItem('jl_horas_pendientes', JSON.stringify(pend));
-      if (cb) cb(true);
+      clearTimeout(to);
+      if (!listo) { listo = true; if (cb) cb(true); } else { renderPendientes(); }
     })
-    .catch(function() { if (cb) cb(false); });
+    .catch(function(err) {
+      clearTimeout(to);
+      ultimoError = (err && err.code === 'PERMISSION_DENIED') ? 'la base de datos rechazó el permiso (PERMISSION_DENIED) — hay que ajustar las reglas de Firebase' : ((err && (err.code || err.message)) || 'error');
+      var pe = el('pending-err'); if (pe) pe.textContent = 'Último error: ' + ultimoError;
+      if (!listo) { listo = true; if (cb) cb(false); }
+    });
 }
 
-function syncPending() {
+function syncPending(manual) {
   var pendientes = getPendientes();
   if (!pendientes.length) return;
+  var restantes = pendientes.length, okCount = 0;
   pendientes.forEach(function(reg) {
-    subirRegistro(reg, function() { renderPendientes(); });
+    subirRegistro(reg, function(ok) {
+      if (ok) okCount++;
+      renderPendientes();
+      if (--restantes === 0 && manual) {
+        if (okCount === pendientes.length) showAlert('alert-ok', '✓ Se enviaron ' + okCount + ' registro(s) al tablero.');
+        else showAlert('alert-err', '✗ No se pudieron enviar ' + (pendientes.length - okCount) + ' registro(s): ' + ultimoError, true);
+      }
+    });
   });
 }
 
@@ -435,14 +440,13 @@ function renderPendientes() {
   el('pending-list').innerHTML = pend.map(function(r) {
     return '<div class="pending-item">'
       + '<div class="pending-info"><strong>' + r.operarioNombre + '</strong>'
-      + '<span>' + r.obraLabel + ' · ' + r.fecha + ' · ' + r.hn + 'hn + ' + r.he + 'he</span></div>'
+      + '<span>' + (r.convenioLabel || r.obraLabel || '') + ' · ' + r.fecha + ' · ' + r.hn + 'hn + ' + r.he + 'he</span></div>'
       + '<span class="pending-badge">Pendiente</span>'
       + '</div>';
   }).join('');
 }
 
 function resetForm() {
-  el('f-oc').value = '';
   el('f-operario').value = '';
   el('f-convenio').value = '';
   poblarCategorias('');
@@ -452,14 +456,15 @@ function resetForm() {
   el('f-costo-preview').style.display = 'none';
 }
 
-function showAlert(id, msg) {
+function showAlert(id, msg, largo) {
   ['alert-ok','alert-err','alert-offline'].forEach(function(a) {
     el(a).style.display = 'none';
   });
   var el2 = el(id);
   el2.textContent = msg;
   el2.style.display = 'block';
-  setTimeout(function() { el2.style.display = 'none'; }, 4000);
+  clearTimeout(el2._h);
+  el2._h = setTimeout(function() { el2.style.display = 'none'; }, largo ? 15000 : 4000);
 }
 
 // Init
