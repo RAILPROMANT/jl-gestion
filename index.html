@@ -206,23 +206,6 @@ select option{background:var(--bg2)}
     </div>
     <div id="lerr" class="lerr"></div>
     <button class="lbtn" id="btn-login">Ingresar</button>
-    <div class="divider">o</div>
-    <button class="drive-login-btn" id="btn-drive-login">
-      <svg width="18" height="18" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-        <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
-        <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
-        <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
-        <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
-        <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
-        <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 27h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
-      </svg>
-      Conectar con Google Drive
-    </button>
-    <div id="lerr2" class="lerr" style="margin-top:10px"></div>
-    <div id="drive-cid-row" style="display:none!important;margin-top:10px">
-      <input id="drive-cid" class="linput" type="text" placeholder="Client ID (.apps.googleusercontent.com)" style="font-size:12px;margin-bottom:8px">
-      <button class="lbtn" id="btn-drive-connect">Autenticar con Google</button>
-    </div>
   </div>
 </div>
 
@@ -794,14 +777,15 @@ select option{background:var(--bg2)}
   <div class="mbox" style="max-width:440px"><div class="mt">Google Drive</div>
     <div id="drive-setup">
       <p style="font-size:13px;color:var(--txm);margin-bottom:8px;line-height:1.7">Sincroniz&#225; tus datos entre dispositivos.</p>
-      <p style="font-size:12px;color:var(--red2);margin-bottom:16px">&#9888; Solo se permite <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="51323e3f25303225112330383d21233e7f323e3c7f3023">[email&#160;protected]</a></strong></p>
+      <p style="font-size:12px;color:var(--txm);margin-bottom:16px;line-height:1.6">Entr&#225; con la cuenta de Google donde se guardan los presupuestos (recomendado: <strong>contacto@railpro.com.ar</strong>). Cualquier usuario del tablero puede conectarla. Google mantiene la conexi&#243;n 1 hora; despu&#233;s el bot&#243;n Drive se pone en amarillo y se reconecta con un clic.</p>
       
       <div id="d-err" style="font-size:12px;color:var(--red2);min-height:16px;margin-bottom:8px"></div>
       <button class="btn btnp" id="btn-connect-drive" style="width:100%">Conectar</button>
     </div>
     <div id="drive-ok" style="display:none;text-align:center;padding:10px 0">
       <div style="color:var(--grn);font-size:15px;font-weight:700;margin-bottom:8px">&#10003; Conectado</div>
-      <div id="d-email" style="font-size:13px;color:var(--txm);margin-bottom:14px"></div>
+      <div id="d-email" style="font-size:13px;color:var(--txm);margin-bottom:6px"></div>
+      <div id="d-msg" style="font-size:12px;color:var(--txm);min-height:16px;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px;justify-content:center">
         <button class="btn btns" id="btn-drive-sync">&#8635; Sincronizar</button>
         <button class="btn btns btnd" id="btn-drive-disc">Desconectar</button>
@@ -811,7 +795,7 @@ select option{background:var(--bg2)}
   </div>
 </div>
 <div id="pdfprev"></div>
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 // ═══════════════════════════════════════
 // UTILIDADES
 // ═══════════════════════════════════════
@@ -886,131 +870,214 @@ function cambiarPass() {
 // ═══════════════════════════════════════
 // DRIVE
 // ═══════════════════════════════════════
-var DRIVE = { con: false, tok: null, fid: null };
+var DRIVE = { con: false, tok: null, fid: null, email: '', exp: 0, expirado: false };
 var DRIVE_CLIENT_ID = '493528171345-c88jbr37k1t2u8bi5qm16o4j7hhtcpcf.apps.googleusercontent.com';
+var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+var DRIVE_ROOT_FOLDER = 'JL Presupuestos';
+var _driveTokenClient = null, _driveCb = null, _driveErrEl = null, _driveExpTimer = null;
 
-function iniciarDriveLogin() {
-  var err = el('lerr2');
-  err.textContent = 'Conectando con Google...';
-  _loadGAPI(DRIVE_CLIENT_ID, err, function(email, token) {
-    DRIVE.tok = token; DRIVE.con = true;
-    err.textContent = '';
-    _updateDrivePill();
-    if (!el('login').classList.contains('oculto')) {
-      el('login').classList.add('oculto');
-      el('app').classList.add('visible');
-      el('hdr-user').textContent = CURRENT_USER ? CURRENT_USER.nombre : email;
-      iniciarApp();
-    }
-    _loadFromDrive();
-  });
+function _driveHintKey() { return 'jl_drive_email_' + (CURRENT_USER ? CURRENT_USER.u : 'anon'); }
+
+function _driveToast(msg, isErr) {
+  var t = document.getElementById('drive-toast');
+  if (!t) {
+    t = document.createElement('div'); t.id = 'drive-toast';
+    t.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:99999;max-width:340px;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.style.background = isErr ? '#7f1d1d' : '#14532d';
+  t.style.color = '#fff'; t.style.border = '1px solid ' + (isErr ? '#dc2626' : '#22c55e');
+  t.textContent = msg; t.style.opacity = '1'; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.style.display = 'none'; }, 300); }, isErr ? 7000 : 3500);
 }
 
-function connectDriveLogin() {
-  iniciarDriveLogin();
+function _driveErrMsg(code) {
+  var m = {
+    access_denied: 'Google rechazó el acceso. Si apareció "Acceso bloqueado" o "app no verificada", esa cuenta tiene que estar agregada como usuario de prueba en Google Cloud.',
+    popup_closed: 'Se cerró la ventana de Google antes de terminar. Probá de nuevo.',
+    popup_failed_to_open: 'El navegador bloqueó la ventana de Google. Permití ventanas emergentes para este sitio y probá de nuevo.',
+    invalid_client: 'El Client ID de Google no es válido o fue eliminado en Google Cloud.',
+    unauthorized_client: 'Este sitio no está autorizado en Google Cloud (falta agregarlo en "Orígenes de JavaScript autorizados").'
+  };
+  return m[code] || ('Error de Google: ' + code);
 }
+
+// Compatibilidad: algunos botones viejos llamaban a estas funciones
+function iniciarDriveLogin() { connectDrive(); }
+function connectDriveLogin() { connectDrive(); }
 
 function abrirDriveMo() {
-  var cid = localStorage.getItem('jl_drive_cid') || '';
-  el('d-cid').value = cid; el('d-err').textContent = '';
+  el('d-err').textContent = ''; if (el('d-msg')) el('d-msg').textContent = '';
   el('drive-setup').style.display = DRIVE.con ? 'none' : 'block';
   el('drive-ok').style.display = DRIVE.con ? 'block' : 'none';
+  if (DRIVE.con) el('d-email').textContent = 'Conectado como ' + (DRIVE.email || 'Google');
+  var b = el('btn-connect-drive');
+  if (b) b.textContent = DRIVE.expirado ? 'Reconectar' : 'Conectar';
   abrirMo('mo-drive');
 }
 
 function connectDrive() {
   var err = el('d-err');
-  err.textContent = 'Conectando...';
-  _loadGAPI(DRIVE_CLIENT_ID, err, function(email, token) {
-    DRIVE.tok = token; DRIVE.con = true;
+  err.textContent = 'Abriendo ventana de Google...';
+  _loadGAPI(DRIVE_CLIENT_ID, err, function(email, token, expiresIn) {
+    DRIVE.tok = token; DRIVE.con = true; DRIVE.expirado = false; DRIVE.email = email;
+    DRIVE.exp = Date.now() + (expiresIn || 3600) * 1000;
+    try { localStorage.setItem(_driveHintKey(), email); } catch(e) {}
+    clearTimeout(_driveExpTimer);
+    _driveExpTimer = setTimeout(_driveMarcarExpirado, Math.max(60000, DRIVE.exp - Date.now() - 60000));
+    err.textContent = '';
     el('d-email').textContent = 'Conectado como ' + email;
     el('drive-setup').style.display = 'none'; el('drive-ok').style.display = 'block';
-    _updateDrivePill(); driveSync();
+    _updateDrivePill();
+    _driveToast('Drive conectado (' + email + ')');
+    _loadFromDrive();
   });
 }
 
 function _loadGAPI(cid, errEl, cb) {
-  if (typeof google !== 'undefined' && google.accounts) { _doOAuth(cid, errEl, cb); return; }
+  if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) { _doOAuth(cid, errEl, cb); return; }
   var scr = document.createElement('script');
   scr.src = 'https://accounts.google.com/gsi/client';
   scr.onload = function() { _doOAuth(cid, errEl, cb); };
-  scr.onerror = function() { errEl.textContent = 'No se pudo cargar Google API.'; };
+  scr.onerror = function() { errEl.textContent = 'No se pudo cargar Google. Revisá la conexión o un bloqueador de anuncios.'; };
   document.head.appendChild(scr);
 }
 
 function _doOAuth(cid, errEl, cb) {
+  _driveCb = cb; _driveErrEl = errEl;
   try {
-    google.accounts.oauth2.initTokenClient({
-      client_id: DRIVE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email',
-      callback: function(resp) {
-        if (resp.error) { errEl.textContent = 'Error OAuth: ' + resp.error; return; }
-        fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { 'Authorization': 'Bearer ' + resp.access_token } })
-          .then(function(r) { return r.json(); }).then(function(info) {
-            cb(info.email || 'Google', resp.access_token);
-          }).catch(function() { cb('Google', resp.access_token); });
-      }
-    }).requestAccessToken();
+    if (!_driveTokenClient) {
+      _driveTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: DRIVE_CLIENT_ID,
+        scope: DRIVE_SCOPE,
+        callback: function(resp) {
+          if (resp.error) { _driveErrEl.textContent = _driveErrMsg(resp.error); return; }
+          var tok = resp.access_token, exp = parseInt(resp.expires_in, 10) || 3600;
+          fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { 'Authorization': 'Bearer ' + tok } })
+            .then(function(r) { return r.json(); })
+            .then(function(info) { _driveCb(info.email || 'Google', tok, exp); })
+            .catch(function() { _driveCb('Google', tok, exp); });
+        },
+        error_callback: function(e) { _driveErrEl.textContent = _driveErrMsg((e && e.type) || 'desconocido'); }
+      });
+    }
+    var hint = '';
+    try { hint = localStorage.getItem(_driveHintKey()) || ''; } catch(e) {}
+    var opts = { prompt: hint ? '' : 'select_account' };
+    if (hint) opts.login_hint = hint;
+    _driveTokenClient.requestAccessToken(opts);
   } catch(e) { errEl.textContent = 'Error: ' + e.message; }
+}
+
+function _driveMarcarExpirado() {
+  if (!DRIVE.con) return;
+  DRIVE.con = false; DRIVE.tok = null; DRIVE.expirado = true;
+  _updateDrivePill();
+  _driveToast('La conexión con Drive venció. Tocá el botón Drive para reconectar.', true);
+}
+
+// fetch con token; si Google responde 401 marca la conexión como vencida
+function _driveFetch(url, opts) {
+  opts = opts || {}; opts.headers = opts.headers || {};
+  opts.headers['Authorization'] = 'Bearer ' + DRIVE.tok;
+  return fetch(url, opts).then(function(r) {
+    if (r.status === 401) { _driveMarcarExpirado(); throw new Error('Drive: sesión vencida'); }
+    if (!r.ok) throw new Error('Drive respondió ' + r.status);
+    return r;
+  });
 }
 
 function _updateDrivePill() {
   var pill = el('drive-pill'), dot = el('dp-dot'), txt = el('dp-txt');
-  if (DRIVE.con) { pill.classList.add('con'); dot.style.background = 'var(--grn)'; txt.textContent = 'Drive \u2713'; }
-  else { pill.classList.remove('con'); dot.style.background = '#444'; txt.textContent = 'Drive'; }
+  if (!pill) return;
+  if (DRIVE.con) { pill.classList.add('con'); dot.style.background = 'var(--grn)'; txt.textContent = 'Drive ✓'; pill.title = DRIVE.email || ''; }
+  else if (DRIVE.expirado) { pill.classList.remove('con'); dot.style.background = '#f59e0b'; txt.textContent = 'Drive ↻'; pill.title = 'Conexión vencida: clic para reconectar'; }
+  else { pill.classList.remove('con'); dot.style.background = '#444'; txt.textContent = 'Drive'; pill.title = 'Conectar Google Drive'; }
 }
 
 function driveSync() {
-  if (!DRIVE.con || !DRIVE.tok) return;
+  if (!DRIVE.con || !DRIVE.tok) { _driveToast('Drive no está conectado.', true); return; }
+  var msg = el('d-msg'); if (msg) msg.textContent = 'Sincronizando...';
   var data = JSON.stringify(_exp());
   _findOrCreate(function(fid) {
     DRIVE.fid = fid;
-    fetch('https://www.googleapis.com/upload/drive/v3/files/' + fid + '?uploadType=media', {
-      method: 'PATCH', headers: { 'Authorization': 'Bearer ' + DRIVE.tok, 'Content-Type': 'application/json' }, body: data
-    }).catch(function() {});
+    _driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + fid + '?uploadType=media', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: data
+    }).then(function() {
+      var h = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      if (msg) msg.textContent = 'Copia de seguridad guardada en Drive a las ' + h;
+    }).catch(function(e) { if (msg) msg.textContent = e.message; });
   });
 }
 
 function _loadFromDrive() {
-  // Drive is backup only - Firebase is the source of truth
-  // Only sync Drive → Firebase if Firebase is empty
+  // Firebase es la fuente de verdad (sincroniza a todos los usuarios en vivo).
+  // Drive guarda una copia de seguridad y los PDF. Solo se lee de Drive si Firebase está vacío.
   if (!DRIVE.con || !DRIVE.tok) return;
   _findOrCreate(function(fid) {
     DRIVE.fid = fid;
-    // Check Firebase first
     DB.ref(FB_PATH).once('value').then(function(snap) {
       var fbData = snap.val();
-      if (fbData && fbData.emp && fbData.emp.length > 0) {
-        // Firebase has data - just sync Drive with Firebase (not the other way)
-        driveSync();
-        return;
-      }
-      // Firebase is empty - load from Drive as fallback
-      fetch('https://www.googleapis.com/drive/v3/files/' + fid + '?alt=media', { headers: { 'Authorization': 'Bearer ' + DRIVE.tok } })
+      if (fbData && fbData.emp && fbData.emp.length > 0) { driveSync(); return; }
+      _driveFetch('https://www.googleapis.com/drive/v3/files/' + fid + '?alt=media')
         .then(function(r) { return r.json(); }).then(function(d) {
-          if (d && d.emp) {
-            loadData(d);
-            DB.ref(FB_PATH).set(_exp()); // push Drive data to Firebase
-            renderAll();
-          }
+          if (d && d.emp) { loadData(d); DB.ref(FB_PATH).set(_exp()); renderAll(); }
         }).catch(function() {});
     }).catch(function() {});
   });
 }
 
 function _findOrCreate(cb) {
-  fetch("https://www.googleapis.com/drive/v3/files?q=name='jl_gestion_data.json' and trashed=false&fields=files(id)", { headers: { 'Authorization': 'Bearer ' + DRIVE.tok } })
+  var q = encodeURIComponent("name='jl_gestion_data.json' and trashed=false");
+  _driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)')
     .then(function(r) { return r.json(); }).then(function(d) {
-      if (d.files && d.files.length > 0) { cb(d.files[0].id); }
-      else {
-        fetch('https://www.googleapis.com/drive/v3/files', { method: 'POST', headers: { 'Authorization': 'Bearer ' + DRIVE.tok, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'jl_gestion_data.json', mimeType: 'application/json' }) })
-          .then(function(r) { return r.json(); }).then(function(f) { cb(f.id); });
-      }
-    }).catch(function() {});
+      if (d.files && d.files.length > 0) { cb(d.files[0].id); return; }
+      return _driveFetch('https://www.googleapis.com/drive/v3/files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'jl_gestion_data.json', mimeType: 'application/json' }) })
+        .then(function(r) { return r.json(); }).then(function(f) { cb(f.id); });
+    }).catch(function(e) { var msg = el('d-msg'); if (msg) msg.textContent = e.message; });
+}
+
+function _driveGetOrCreateFolder(name, parentId, cb) {
+  var q = "name='" + name.replace(/'/g, "\\'") + "' and mimeType='application/vnd.google-apps.folder' and trashed=false" + (parentId ? " and '" + parentId + "' in parents" : " and 'root' in parents");
+  _driveFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id)')
+    .then(function(r) { return r.json(); }).then(function(d) {
+      if (d.files && d.files.length) { cb(d.files[0].id); return; }
+      var meta = { name: name, mimeType: 'application/vnd.google-apps.folder' };
+      if (parentId) meta.parents = [parentId];
+      return _driveFetch('https://www.googleapis.com/drive/v3/files?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) })
+        .then(function(r) { return r.json(); }).then(function(f) { cb(f.id); });
+    }).catch(function(e) { cb(null, e); });
+}
+
+// Sube un PDF a JL Presupuestos / AÑO / MES /
+function driveUploadPDF(blob, filename) {
+  if (!DRIVE.con || !DRIVE.tok) return;
+  var meses = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo','06-Junio','07-Julio','08-Agosto','09-Septiembre','10-Octubre','11-Noviembre','12-Diciembre'];
+  var d = new Date();
+  var fail = function(e) { _driveToast('No se pudo subir el PDF a Drive' + (e ? ': ' + e.message : ''), true); };
+  _driveGetOrCreateFolder(DRIVE_ROOT_FOLDER, null, function(rootId, e1) {
+    if (!rootId) return fail(e1);
+    _driveGetOrCreateFolder(String(d.getFullYear()), rootId, function(yId, e2) {
+      if (!yId) return fail(e2);
+      _driveGetOrCreateFolder(meses[d.getMonth()], yId, function(mId, e3) {
+        if (!mId) return fail(e3);
+        var form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify({ name: filename, mimeType: 'application/pdf', parents: [mId] })], { type: 'application/json' }));
+        form.append('file', blob, filename);
+        _driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', body: form })
+          .then(function() { _driveToast('PDF guardado en Drive: ' + DRIVE_ROOT_FOLDER + ' / ' + d.getFullYear() + ' / ' + meses[d.getMonth()]); })
+          .catch(fail);
+      });
+    });
+  });
 }
 
 function driveDisc() {
-  DRIVE.con = false; DRIVE.tok = null; DRIVE.fid = null; _updateDrivePill();
+  try { if (DRIVE.tok && google && google.accounts) google.accounts.oauth2.revoke(DRIVE.tok, function() {}); } catch(e) {}
+  clearTimeout(_driveExpTimer);
+  DRIVE.con = false; DRIVE.tok = null; DRIVE.fid = null; DRIVE.expirado = false; DRIVE.email = '';
+  try { localStorage.removeItem(_driveHintKey()); } catch(e) {}
+  _updateDrivePill();
   el('drive-setup').style.display = 'block'; el('drive-ok').style.display = 'none';
 }
 
@@ -1088,8 +1155,6 @@ function iniciarApp() {
   ['c-fec', 'oc-fec', 'gp-fec'].forEach(function(id) { var e = el(id); if (e) e.value = today; });
   ['rep-desde', 'mr-desde'].forEach(function(id) { var e = el(id); if (e) e.value = today.slice(0, 8) + '01'; });
   ['rep-hasta', 'mr-hasta'].forEach(function(id) { var e = el(id); if (e) e.value = today; });
-  var cid = localStorage.getItem('jl_drive_cid');
-  if (cid) { el('d-cid').value = cid; el('drive-cid').value = cid; }
   // Load from Firebase, fallback to localStorage
   DB.ref(FB_PATH).once('value').then(function(snap) {
     var fd = snap.val();
@@ -2498,8 +2563,6 @@ document.addEventListener('DOMContentLoaded', function() {
   el('btn-login').addEventListener('click', doLogin);
   el('lu').addEventListener('keydown', function(e) { if (e.key === 'Enter') el('lp').focus(); });
   el('lp').addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
-  el('btn-drive-login').addEventListener('click', iniciarDriveLogin);
-  el('btn-drive-connect').addEventListener('click', connectDriveLogin);
   el('eye-btn-lp').addEventListener('click', function() { togglePass('lp', 'eye-btn-lp'); });
 
   // App header
@@ -2855,6 +2918,7 @@ document.addEventListener('DOMContentLoaded', function() {
           firstPage = false;
         }
         pdf.save(filename);
+        if (typeof DRIVE !== 'undefined' && DRIVE.con) { try { driveUploadPDF(pdf.output('blob'), filename); } catch(eUp) {} }
       }).catch(function(err) {
         document.body.removeChild(div);
         alert('Error al generar PDF: ' + err.message);
