@@ -120,7 +120,7 @@ select option{background:var(--bg2)}
 .bdgb{background:var(--blud);color:var(--blu)}.bdgy{background:var(--gryd);color:var(--gry2)}
 .bdga{background:rgba(245,158,11,.12);color:#f59e0b}
 .empty{text-align:center;padding:36px;color:var(--txm);font-size:13px}
-.gh-filtros{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.gh-filtros{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
 @media(max-width:900px){.gh-filtros{grid-template-columns:1fr 1fr}}
 .gh-sub td{background:var(--bg2);font-weight:700}
 .gh-num{text-align:right;white-space:nowrap}
@@ -603,6 +603,18 @@ select option{background:var(--bg2)}
           <span id="sync-status" style="font-size:12px;color:var(--txm)"></span>
         </div>
       </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="sttl">Usuarios de la app del encargado</div>
+        <p style="font-size:12px;color:var(--txm);margin-bottom:12px">Solo estos usuarios pueden entrar a <strong>encargado.html</strong> y cargar horas. Cada carga queda registrada con qui&#233;n la hizo. Si desactiv&#225;s a alguien, se le cierra la sesi&#243;n la pr&#243;xima vez que tenga se&#241;al.</p>
+        <div id="enc-users"><div class="empty">Cargando...</div></div>
+        <div class="fr">
+          <div class="fg" style="flex:1;min-width:150px"><label>Nombre</label><input id="enc-n-nombre" type="text" placeholder="Ej: Juan P&#233;rez"></div>
+          <div class="fg" style="flex:1;min-width:130px"><label>Usuario</label><input id="enc-n-user" type="text" placeholder="Ej: jperez" autocomplete="off"></div>
+          <div class="fg" style="flex:1;min-width:130px"><label>Contrase&#241;a</label><input id="enc-n-pass" type="text" placeholder="M&#237;nimo 4 caracteres" autocomplete="off"></div>
+          <button class="btn btnp" id="enc-n-add">+ Agregar usuario</button>
+        </div>
+        <div id="enc-msg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+      </div>
       <div class="two">
         <div>
           <div class="card"><div class="sttl">Categor&#237;as de personal</div><p style="font-size:12px;color:var(--txm);margin-bottom:12px">Los valores de costo/venta se editan en Personal &#8594; Tarifas.</p><div id="cfg-cats"></div></div>
@@ -744,6 +756,7 @@ select option{background:var(--bg2)}
       <div class="fg"><label>Operario</label><select id="gh-op"><option value="">Todos</option></select></div>
       <div class="fg"><label>Convenio</label><select id="gh-conv"><option value="">Todos</option></select></div>
       <div class="fg"><label>Categor&#237;a</label><select id="gh-cat"><option value="">Todas</option></select></div>
+      <div class="fg"><label>Cargado por</label><select id="gh-por"><option value="">Todos</option></select></div>
     </div>
   </div>
   <div class="kpis" id="gh-kpis"></div>
@@ -1399,6 +1412,7 @@ function iniciarApp() {
   ['rep-hasta', 'mr-hasta'].forEach(function(id) { var e = el(id); if (e) e.value = today; });
   // Horas del encargado: se escuchan en vivo desde el arranque, sin depender del resto de la carga
   try { horasCargar(); } catch(eH) {}
+  try { encUsersCargar(); } catch(eE) {}
   // Load from Firebase, fallback to localStorage
   DB.ref(FB_PATH).once('value').then(function(snap) {
     var fd = snap.val();
@@ -1699,6 +1713,8 @@ function _ghTodos() {
       x._conv = r.convenioId || r.convenioLabel || '';
       x._convL = r.convenioLabel || (r.convenioId ? r.convenioId.toUpperCase() : 'Sin convenio');
       x._cat = r.categoriaLabel || r.categoria || 'Sin categoría';
+      x._por = r.cargadoPor || '';
+      x._porL = r.cargadoPorNombre || r.cargadoPor || 'Sin dato';
       out.push(x);
     });
   });
@@ -1721,13 +1737,14 @@ function ghOnChange(id) {
 
 function _ghFiltrados() {
   var desde = el('gh-desde').value, hasta = el('gh-hasta').value;
-  var op = el('gh-op').value, conv = el('gh-conv').value, cat = el('gh-cat').value;
+  var op = el('gh-op').value, conv = el('gh-conv').value, cat = el('gh-cat').value, por = el('gh-por').value;
   return _ghTodos().filter(function(r) {
     if (desde && (r.fecha || '') < desde) return false;
     if (hasta && (r.fecha || '') > hasta) return false;
     if (op && r._op !== op) return false;
     if (conv && r._conv !== conv) return false;
     if (cat && r._cat !== cat) return false;
+    if (por && (r._por || '_') !== por) return false;
     return true;
   });
 }
@@ -1742,7 +1759,7 @@ function _ghPoblarSelects(todos) {
     }).join('');
     if (prev && !items[prev]) s.value = '';
   }
-  var ops = {}, convs = {}, cats = {};
+  var ops = {}, convs = {}, cats = {}, pors = {};
   (S.emp || []).forEach(function(e) { if (e && e.id) ops[e.id] = e.nombre || e.id; });
   (S.convenios || []).forEach(function(cv) { convs[cv.id] = cv.l; });
   var convSel = el('gh-conv').value;
@@ -1750,8 +1767,112 @@ function _ghPoblarSelects(todos) {
     if (!ops[r._op]) ops[r._op] = r.operarioNombre || r._op;
     if (r._conv && !convs[r._conv]) convs[r._conv] = r._convL;
     if (!convSel || r._conv === convSel) cats[r._cat] = r._cat;
+    pors[r._por || '_'] = r._porL;
   });
-  fill('gh-op', ops, 'Todos'); fill('gh-conv', convs, 'Todos'); fill('gh-cat', cats, 'Todas');
+  fill('gh-op', ops, 'Todos'); fill('gh-conv', convs, 'Todos'); fill('gh-cat', cats, 'Todas'); fill('gh-por', pors, 'Todos');
+}
+
+// SHA-256 (UTF-8) — para guardar contraseñas del encargado sin texto plano
+function jlSha256(str) {
+  function rr(n, x) { return (x >>> n) | (x << (32 - n)); }
+  var K = [], H = [], primes = 0, cand = 2;
+  while (primes < 64) {
+    var isP = true;
+    for (var f = 2; f * f <= cand; f++) if (cand % f === 0) { isP = false; break; }
+    if (isP) {
+      if (primes < 8) H[primes] = (Math.pow(cand, 1 / 2) * 4294967296) | 0;
+      K[primes] = (Math.pow(cand, 1 / 3) * 4294967296) | 0;
+      primes++;
+    }
+    cand++;
+  }
+  var bytes = unescape(encodeURIComponent(str)), l = bytes.length, words = [];
+  for (var i = 0; i < l; i++) words[i >> 2] |= (bytes.charCodeAt(i) & 255) << (24 - (i % 4) * 8);
+  words[l >> 2] |= 0x80 << (24 - (l % 4) * 8);
+  words[(((l + 8) >> 6) << 4) + 15] = l * 8;
+  for (var j = 0; j < words.length; j++) words[j] = words[j] | 0;
+  for (var b = 0; b < words.length; b += 16) {
+    var w = words.slice(b, b + 16), a = H.slice(0);
+    for (var t = 0; t < 64; t++) {
+      if (t >= 16) {
+        var w15 = w[t - 15], w2 = w[t - 2];
+        w[t] = (w[t - 16] + (rr(7, w15) ^ rr(18, w15) ^ (w15 >>> 3)) + w[t - 7] + (rr(17, w2) ^ rr(19, w2) ^ (w2 >>> 10))) | 0;
+      }
+      var e = a[4], t1 = (a[7] + (rr(6, e) ^ rr(11, e) ^ rr(25, e)) + ((e & a[5]) ^ (~e & a[6])) + K[t] + w[t]) | 0;
+      var a0 = a[0], t2 = ((rr(2, a0) ^ rr(13, a0) ^ rr(22, a0)) + ((a0 & a[1]) ^ (a0 & a[2]) ^ (a[1] & a[2]))) | 0;
+      a = [(t1 + t2) | 0].concat(a); a[4] = (a[4] + t1) | 0; a.length = 8;
+    }
+    for (var k = 0; k < 8; k++) H[k] = (H[k] + a[k]) | 0;
+  }
+  var hex = '';
+  for (var m = 0; m < 8; m++) hex += ('00000000' + (H[m] >>> 0).toString(16)).slice(-8);
+  return hex;
+}
+function jlHashPass(usuario, pass) { return jlSha256('jl-enc|' + String(usuario).trim().toLowerCase() + '|' + pass); }
+
+// ═══════════════════════════════════════
+// USUARIOS DE LA APP DEL ENCARGADO (Firebase: jl_encargados)
+// ═══════════════════════════════════════
+var ENC_USERS = {}, _encListener = false;
+function encUsersCargar() {
+  if (_encListener) { encUsersRender(); return; }
+  _encListener = true;
+  DB.ref('jl_encargados').on('value', function(snap) {
+    ENC_USERS = snap.val() || {};
+    encUsersRender();
+  }, function(err) {
+    _encListener = false;
+    var b = el('enc-users');
+    if (b) b.innerHTML = '<div class="empty" style="color:var(--red2)">No se pudieron leer los usuarios (' + ((err && (err.code || err.message)) || 'error') + '). Las reglas de Firebase tienen que permitir <strong>jl_encargados</strong>.</div>';
+  });
+}
+function encUsersRender() {
+  var b = el('enc-users'); if (!b) return;
+  var ids = Object.keys(ENC_USERS).sort(function(a, z) { return (ENC_USERS[a].nombre || '').localeCompare(ENC_USERS[z].nombre || ''); });
+  if (!ids.length) { b.innerHTML = '<div class="empty" style="padding:16px">Todav&#237;a no hay usuarios. Mientras no agregues ninguno, nadie puede entrar a la app del encargado.</div>'; return; }
+  b.innerHTML = '<div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Usuario</th><th>Estado</th><th style="text-align:right">Acciones</th></tr></thead><tbody>' +
+    ids.map(function(id) {
+      var x = ENC_USERS[id], act = x.activo !== false;
+      return '<tr><td style="font-weight:600">' + _ghEsc(x.nombre) + '</td><td>' + _ghEsc(x.u) + '</td>' +
+        '<td>' + (act ? '<span class="bdg bdgg">Activo</span>' : '<span class="bdg bdgy">Desactivado</span>') + '</td>' +
+        '<td style="text-align:right;white-space:nowrap">' +
+        '<button class="btn btns" onclick="encUserPass(\'' + id + '\')">Cambiar contrase&#241;a</button> ' +
+        '<button class="btn btns" onclick="encUserToggle(\'' + id + '\')">' + (act ? 'Desactivar' : 'Activar') + '</button> ' +
+        '<button class="btn btns btnd" onclick="encUserBorrar(\'' + id + '\')">&#10005;</button></td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+function _encMsg(t, ok) { var m = el('enc-msg'); if (m) { m.textContent = t; m.style.color = ok ? 'var(--grn)' : 'var(--red2)'; } }
+function encUserAgregar() {
+  var nombre = (el('enc-n-nombre').value || '').trim();
+  var u = (el('enc-n-user').value || '').trim().toLowerCase();
+  var p = el('enc-n-pass').value || '';
+  if (!nombre || !u || !p) return _encMsg('Completá nombre, usuario y contraseña.');
+  if (!/^[a-z0-9._-]{3,}$/.test(u)) return _encMsg('El usuario debe tener al menos 3 caracteres, sin espacios ni acentos.');
+  if (p.length < 4) return _encMsg('La contraseña debe tener al menos 4 caracteres.');
+  if (Object.keys(ENC_USERS).some(function(k) { return ENC_USERS[k].u === u; })) return _encMsg('Ese usuario ya existe.');
+  var id = 'u' + Date.now().toString(36);
+  var reg = { u: u, nombre: nombre, h: jlHashPass(u, p), activo: true, creado: Date.now(), creadoPor: CURRENT_USER ? CURRENT_USER.u : '' };
+  DB.ref('jl_encargados/' + id).set(reg).then(function() {
+    el('enc-n-nombre').value = ''; el('enc-n-user').value = ''; el('enc-n-pass').value = '';
+    _encMsg('Usuario ' + u + ' creado. Ya puede entrar a la app del encargado.', true);
+  }).catch(function(e) { _encMsg('No se pudo guardar: ' + (e.code || e.message)); });
+}
+function encUserPass(id) {
+  var x = ENC_USERS[id]; if (!x) return;
+  var p = prompt('Nueva contraseña para ' + x.nombre + ' (' + x.u + '):');
+  if (p == null) return;
+  if (p.length < 4) { alert('La contraseña debe tener al menos 4 caracteres.'); return; }
+  DB.ref('jl_encargados/' + id + '/h').set(jlHashPass(x.u, p)).then(function() { _encMsg('Contraseña de ' + x.u + ' actualizada.', true); })
+    .catch(function(e) { _encMsg('No se pudo guardar: ' + (e.code || e.message)); });
+}
+function encUserToggle(id) {
+  var x = ENC_USERS[id]; if (!x) return;
+  DB.ref('jl_encargados/' + id + '/activo').set(x.activo === false).catch(function(e) { _encMsg('No se pudo guardar: ' + (e.code || e.message)); });
+}
+function encUserBorrar(id) {
+  var x = ENC_USERS[id]; if (!x) return;
+  if (!confirm('¿Eliminar el usuario ' + x.nombre + ' (' + x.u + ')? Las horas que ya cargó no se borran.')) return;
+  DB.ref('jl_encargados/' + id).remove().catch(function(e) { _encMsg('No se pudo eliminar: ' + (e.code || e.message)); });
 }
 
 function horasRender() {
@@ -1821,7 +1942,7 @@ function horasRender() {
 
   // Detalle
   el('horas-tabla').innerHTML = '<div style="overflow-x:auto"><table><thead><tr><th>Fecha</th><th>Operario</th><th>Convenio</th><th>Categor&#237;a</th>' +
-    '<th class="gh-num">Hs norm.</th><th class="gh-num">Hs extra</th><th class="gh-num">$ normales</th><th class="gh-num">$ extras</th><th class="gh-num">Total</th><th></th></tr></thead><tbody>' +
+    '<th class="gh-num">Hs norm.</th><th class="gh-num">Hs extra</th><th class="gh-num">$ normales</th><th class="gh-num">$ extras</th><th class="gh-num">Total</th><th>Cargado por</th><th></th></tr></thead><tbody>' +
     regs.map(function(r) {
       var f = (r.fecha || '').split('-'); var fecha = f.length === 3 ? f[2] + '/' + f[1] + '/' + f[0] : (r.fecha || '');
       return '<tr><td style="white-space:nowrap">' + fecha + '</td><td style="font-weight:600">' + _ghEsc(r.operarioNombre || r._op) + '</td>' +
@@ -1829,6 +1950,7 @@ function horasRender() {
         '<td class="gh-num">' + _ghNum(r.hn) + '</td><td class="gh-num">' + _ghNum(r.he) + '</td>' +
         '<td class="gh-num">' + $f(r.costoHn || 0) + '</td><td class="gh-num">' + $f(r.costoHe || 0) + '</td>' +
         '<td class="gh-num" style="font-weight:700">' + $f(r.costoTotal || 0) + '</td>' +
+        '<td style="font-size:12px;color:var(--txm)">' + _ghEsc(r._porL) + '</td>' +
         '<td><button class="btn btns btnd" title="Eliminar registro" onclick="ghBorrar(\'' + _ghEsc(r._k) + '\',\'' + _ghEsc(r._id) + '\')">&#10005;</button></td></tr>';
     }).join('') + '</tbody></table></div>';
 }
@@ -1840,7 +1962,7 @@ function ghBorrar(k, id) {
 }
 
 function ghLimpiar() {
-  ['gh-op', 'gh-conv', 'gh-cat'].forEach(function(id) { el(id).value = ''; });
+  ['gh-op', 'gh-conv', 'gh-cat', 'gh-por'].forEach(function(id) { el(id).value = ''; });
   el('gh-mes').value = _ghMesActual(); ghOnChange('gh-mes');
 }
 
@@ -1866,8 +1988,8 @@ function ghExportar() {
   Object.keys(g).sort().forEach(function(k) { var x = g[k]; L.push([q(x.op), q(x.conv), q(x.cat), Object.keys(x.dias).length, n(x.hn), n(x.he), n(x.hn + x.he), n(Math.round(x.imp))].join(';')); });
   L.push('');
   L.push('DETALLE');
-  L.push(['Fecha', 'Operario', 'Convenio', 'Categoria', 'Hs normales', 'Hs extras', '$ normales', '$ extras', 'Total'].join(';'));
-  regs.forEach(function(r) { L.push([r.fecha, q(r.operarioNombre || r._op), q(r._convL), q(r._cat), n(r.hn), n(r.he), n(r.costoHn), n(r.costoHe), n(r.costoTotal)].join(';')); });
+  L.push(['Fecha', 'Operario', 'Convenio', 'Categoria', 'Hs normales', 'Hs extras', '$ normales', '$ extras', 'Total', 'Cargado por'].join(';'));
+  regs.forEach(function(r) { L.push([r.fecha, q(r.operarioNombre || r._op), q(r._convL), q(r._cat), n(r.hn), n(r.he), n(r.costoHn), n(r.costoHe), n(r.costoTotal), q(r._porL)].join(';')); });
   var blob = new Blob(['﻿' + L.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3587,6 +3709,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   el('p-srch').addEventListener('input', renderProv);
   el('gh-limpiar').addEventListener('click', ghLimpiar);
+  el('enc-n-add').addEventListener('click', encUserAgregar);
   el('gh-export').addEventListener('click', ghExportar);
   document.addEventListener('change', function(e) {
     if (e.target.id && e.target.id.indexOf('gh-') === 0) ghOnChange(e.target.id);

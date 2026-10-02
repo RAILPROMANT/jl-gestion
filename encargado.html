@@ -7,6 +7,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0c">
 <title>JL — Registro de Horas</title>
+<link rel="manifest" href="manifest-encargado.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="JL Horas">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -61,9 +65,35 @@ html,body{min-height:100%;background:var(--bg);color:var(--tx);font-size:15px}
 .pending-info strong{display:block;margin-bottom:2px}
 .pending-info span{color:var(--txm);font-size:11px}
 .pending-badge{background:rgba(245,158,11,.15);color:#f59e0b;border-radius:99px;padding:3px 9px;font-size:10px;font-weight:700}
+/* Login */
+#login-enc{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+#login-enc.oculto{display:none}
+.lbox{width:100%;max-width:360px;background:var(--bg1);border:1px solid var(--br);border-radius:16px;padding:26px 22px;text-align:center}
+.lbox .fg{text-align:left}
+.lerr{color:var(--red2);font-size:13px;min-height:18px;margin:4px 0 10px}
+.btn-salir{background:none;border:1px solid var(--br2);color:var(--txm);border-radius:99px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
+.hdr-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 </style>
 </head>
 <body>
+
+<div id="login-enc">
+  <div class="lbox">
+    <svg viewBox="0 0 110 76" fill="none" xmlns="http://www.w3.org/2000/svg" width="70" height="48" style="margin-bottom:10px">
+      <path d="M 18 52 C 8 44 6 30 18 20 C 28 12 46 8 62 10" stroke="#5a6070" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <path d="M 48 66 C 68 72 90 66 98 54 C 106 42 100 26 84 18" stroke="#dc2626" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <text x="22" y="57" font-family="Arial" font-weight="900" font-size="42" fill="#dc2626" letter-spacing="-2">J</text>
+      <text x="54" y="57" font-family="Arial" font-weight="900" font-size="42" fill="#5a6070" letter-spacing="-2">L</text>
+    </svg>
+    <div style="font-weight:800;font-size:17px;margin-bottom:2px">Registro de Horas</div>
+    <div style="font-size:12px;color:var(--txm);margin-bottom:20px">Ingresá con tu usuario de encargado</div>
+    <div class="fg"><label>Usuario</label><input id="l-user" type="text" autocomplete="username" autocapitalize="none"></div>
+    <div class="fg"><label>Contraseña</label><input id="l-pass" type="password" autocomplete="current-password"></div>
+    <div class="lerr" id="l-err"></div>
+    <button class="btn-save" id="btn-login" onclick="encLogin()">Ingresar</button>
+    <div style="font-size:11px;color:var(--txm);margin-top:14px;line-height:1.5">La primera vez en cada celular necesitás internet.<br>Después podés entrar y cargar horas sin señal.</div>
+  </div>
+</div>
 
 <div class="hdr">
   <div class="hdr-logo">
@@ -78,8 +108,11 @@ html,body{min-height:100%;background:var(--bg);color:var(--tx);font-size:15px}
       <div class="hdr-sub">App del encargado</div>
     </div>
   </div>
-  <div class="offline-badge" id="offline-badge">Sin conexión</div>
-  <div id="fb-badge" style="font-size:11px;font-weight:700;border-radius:99px;padding:4px 10px;background:rgba(255,255,255,.06);color:var(--txm)">Conectando…</div>
+  <div class="hdr-right">
+    <div class="offline-badge" id="offline-badge">Sin conexión</div>
+    <div id="fb-badge" style="font-size:11px;font-weight:700;border-radius:99px;padding:4px 10px;background:rgba(255,255,255,.06);color:var(--txm)">Conectando…</div>
+    <button class="btn-salir" id="btn-salir" onclick="encLogout()" title="Cerrar sesión">👤 <span id="hdr-user"></span> · Salir</button>
+  </div>
 </div>
 
 <div class="body">
@@ -160,8 +193,93 @@ var firebaseConfig = {
   messagingSenderId: "1033671194062",
   appId: "1:1033671194062:web:c9c71c6d59266bc215e79f"
 };
-firebase.initializeApp(firebaseConfig);
-var DB = firebase.database();
+var DB = null;
+try { firebase.initializeApp(firebaseConfig); DB = firebase.database(); } catch(e) { DB = null; }
+var fbConectado = false;
+var SESION = null; // { u, nombre }
+// SHA-256 (UTF-8) — para guardar contraseñas del encargado sin texto plano
+function jlSha256(str) {
+  function rr(n, x) { return (x >>> n) | (x << (32 - n)); }
+  var K = [], H = [], primes = 0, cand = 2;
+  while (primes < 64) {
+    var isP = true;
+    for (var f = 2; f * f <= cand; f++) if (cand % f === 0) { isP = false; break; }
+    if (isP) {
+      if (primes < 8) H[primes] = (Math.pow(cand, 1 / 2) * 4294967296) | 0;
+      K[primes] = (Math.pow(cand, 1 / 3) * 4294967296) | 0;
+      primes++;
+    }
+    cand++;
+  }
+  var bytes = unescape(encodeURIComponent(str)), l = bytes.length, words = [];
+  for (var i = 0; i < l; i++) words[i >> 2] |= (bytes.charCodeAt(i) & 255) << (24 - (i % 4) * 8);
+  words[l >> 2] |= 0x80 << (24 - (l % 4) * 8);
+  words[(((l + 8) >> 6) << 4) + 15] = l * 8;
+  for (var j = 0; j < words.length; j++) words[j] = words[j] | 0;
+  for (var b = 0; b < words.length; b += 16) {
+    var w = words.slice(b, b + 16), a = H.slice(0);
+    for (var t = 0; t < 64; t++) {
+      if (t >= 16) {
+        var w15 = w[t - 15], w2 = w[t - 2];
+        w[t] = (w[t - 16] + (rr(7, w15) ^ rr(18, w15) ^ (w15 >>> 3)) + w[t - 7] + (rr(17, w2) ^ rr(19, w2) ^ (w2 >>> 10))) | 0;
+      }
+      var e = a[4], t1 = (a[7] + (rr(6, e) ^ rr(11, e) ^ rr(25, e)) + ((e & a[5]) ^ (~e & a[6])) + K[t] + w[t]) | 0;
+      var a0 = a[0], t2 = ((rr(2, a0) ^ rr(13, a0) ^ rr(22, a0)) + ((a0 & a[1]) ^ (a0 & a[2]) ^ (a[1] & a[2]))) | 0;
+      a = [(t1 + t2) | 0].concat(a); a[4] = (a[4] + t1) | 0; a.length = 8;
+    }
+    for (var k = 0; k < 8; k++) H[k] = (H[k] + a[k]) | 0;
+  }
+  var hex = '';
+  for (var m = 0; m < 8; m++) hex += ('00000000' + (H[m] >>> 0).toString(16)).slice(-8);
+  return hex;
+}
+function jlHashPass(usuario, pass) { return jlSha256('jl-enc|' + String(usuario).trim().toLowerCase() + '|' + pass); }
+
+// ── Usuarios del encargado (se crean en el tablero: Configuración > Usuarios de la app del encargado)
+function encUsuarios() {
+  try { var d = JSON.parse(localStorage.getItem('jl_enc_users') || '{}'); return Object.keys(d).map(function(k) { return d[k]; }); } catch(e) { return []; }
+}
+function encLogin() {
+  var u = (el('l-user').value || '').trim().toLowerCase(), p = el('l-pass').value || '';
+  var err = el('l-err');
+  if (!u || !p) { err.textContent = 'Ingresá usuario y contraseña.'; return; }
+  var lista = encUsuarios();
+  if (!lista.length) {
+    err.textContent = navigator.onLine ? 'Cargando usuarios del tablero… probá de nuevo en unos segundos.' : 'La primera vez necesitás internet para ingresar.';
+    return;
+  }
+  var h = jlHashPass(u, p);
+  var found = lista.find(function(x) { return x && x.u === u && x.h === h; });
+  if (!found) { err.textContent = 'Usuario o contraseña incorrectos.'; el('l-pass').value = ''; return; }
+  if (found.activo === false) { err.textContent = 'Este usuario está desactivado. Consultá con la oficina.'; return; }
+  SESION = { u: found.u, nombre: found.nombre || found.u };
+  try { localStorage.setItem('jl_enc_sesion', JSON.stringify(SESION)); } catch(e) {}
+  err.textContent = ''; el('l-pass').value = '';
+  mostrarApp();
+}
+function encLogout() {
+  if (getPendientes().length && !confirm('Hay registros pendientes de enviar. Quedan guardados en este celular y se enviarán cuando vuelvas a ingresar. ¿Cerrar sesión?')) return;
+  SESION = null;
+  try { localStorage.removeItem('jl_enc_sesion'); } catch(e) {}
+  el('login-enc').classList.remove('oculto');
+}
+function mostrarApp() {
+  el('login-enc').classList.add('oculto');
+  el('hdr-user').textContent = SESION ? SESION.nombre : '';
+}
+// Si en el tablero desactivan o borran al usuario, se le cierra la sesión
+function encVerificarSesion() {
+  if (!SESION) return;
+  var lista = encUsuarios(); if (!lista.length) return;
+  var f = lista.find(function(x) { return x && x.u === SESION.u; });
+  if (!f || f.activo === false) {
+    SESION = null; try { localStorage.removeItem('jl_enc_sesion'); } catch(e) {}
+    el('login-enc').classList.remove('oculto');
+    el('l-err').textContent = 'Tu usuario fue desactivado o eliminado en el tablero.';
+  }
+}
+el('l-user').addEventListener('keydown', function(e) { if (e.key === 'Enter') el('l-pass').focus(); });
+el('l-pass').addEventListener('keydown', function(e) { if (e.key === 'Enter') encLogin(); });
 
 var isOnline = navigator.onLine;
 // S.convenios se sincroniza con el tablero (Personal > Tarifas).
@@ -213,7 +331,7 @@ function cargarDatos() {
     } catch(e) {}
   }
   poblarSelectores();
-  if (isOnline) {
+  if (DB) {
     // Escucha en tiempo real: si cambian las tarifas o el personal en el tablero,
     // este formulario siempre calcula con los valores más recientes.
     DB.ref('jl_data').on('value', function(snap) {
@@ -226,14 +344,26 @@ function cargarDatos() {
         try { localStorage.setItem('jl_data', JSON.stringify(d)); } catch(e) {}
         poblarSelectores();
         calcularPreview();
+
       }
     }, function(err) {
       showAlert('alert-err', 'No se pudieron leer obras y operarios del tablero (' + ((err && (err.code || err.message)) || 'error') + ').', true);
     });
   }
+  // Usuarios habilitados (se guardan en el celular para poder ingresar sin señal)
+  if (DB) {
+    DB.ref('jl_encargados').on('value', function(snap) {
+      try { localStorage.setItem('jl_enc_users', JSON.stringify(snap.val() || {})); } catch(e) {}
+      encVerificarSesion();
+    }, function(err) {
+      el('l-err').textContent = 'No se pudieron leer los usuarios (' + ((err && (err.code || err.message)) || 'error') + ').';
+    });
+  }
   // Indicador de conexión real con la base de datos del tablero
+  if (!DB) { var b0 = el('fb-badge'); b0.textContent = '● Sin conexión — modo offline'; b0.style.color = '#f59e0b'; b0.style.background = 'rgba(245,158,11,.12)'; return; }
   DB.ref('.info/connected').on('value', function(s) {
     var b = el('fb-badge'); if (!b) return;
+    fbConectado = s.val() === true;
     if (s.val() === true) { b.textContent = '● Conectado al tablero'; b.style.color = 'var(--grn)'; b.style.background = 'var(--grnd)'; syncPending(); }
     else { b.textContent = '● Sin conexión al tablero'; b.style.color = '#f59e0b'; b.style.background = 'rgba(245,158,11,.12)'; }
   });
@@ -317,6 +447,7 @@ function calcularPreview() {
 }
 
 function guardarRegistro() {
+  if (!SESION) { el('login-enc').classList.remove('oculto'); return; }
   var opId     = el('f-operario').value;
   var convenioId = el('f-convenio').value;
   var catId    = el('f-categoria').value;
@@ -350,6 +481,8 @@ function guardarRegistro() {
     timestamp: Date.now(),
     fecha: fecha,
     mes: fecha.slice(0, 7),
+    cargadoPor: SESION.u,
+    cargadoPorNombre: SESION.nombre,
     operarioId: opId,
     operarioNombre: empNombre ? empNombre.nombre : opId,
     convenioId: convenioId,
@@ -369,19 +502,21 @@ function guardarRegistro() {
   pendientes.push(registro);
   localStorage.setItem('jl_horas_pendientes', JSON.stringify(pendientes));
 
-  if (isOnline) {
+  if (DB && fbConectado) {
     subirRegistro(registro, function(ok) {
       if (ok) {
         showAlert('alert-ok', '✓ Registro guardado y enviado al tablero.');
         resetForm();
       } else {
-        showAlert('alert-err', '✗ No llegó al tablero: ' + (ultimoError || 'error desconocido') + '. Quedó guardado en el celular; abajo podés reintentar.', true);
+        if (/PERMISSION/.test(ultimoError)) showAlert('alert-err', '✗ No llegó al tablero: ' + ultimoError + '. Quedó guardado en el celular; abajo podés reintentar.', true);
+        else showAlert('alert-offline', '⚠ Señal débil: quedó guardado en el celular y se enviará solo cuando haya conexión.', true);
         resetForm();
       }
       renderPendientes();
     });
   } else {
-    showAlert('alert-offline', '⚠ Sin internet — guardado localmente. Se sincronizará al reconectarse.');
+    showAlert('alert-offline', '⚠ Sin conexión: quedó guardado en este celular. Se envía solo cuando vuelva la señal.', true);
+    if (DB) subirRegistro(registro, function() { renderPendientes(); }); // Firebase lo deja en cola mientras la página siga abierta
     resetForm();
     renderPendientes();
   }
@@ -389,6 +524,7 @@ function guardarRegistro() {
 
 var ultimoError = '';
 function subirRegistro(reg, cb) {
+  if (!DB) { ultimoError = 'sin conexión'; if (cb) cb(false); return; }
   var listo = false;
   // Si Firebase no responde en 15 s, se avisa (queda pendiente y se reintenta solo)
   var to = setTimeout(function() { if (!listo) { listo = true; ultimoError = 'sin respuesta del servidor'; if (cb) cb(false); } }, 15000);
@@ -468,10 +604,19 @@ function showAlert(id, msg, largo) {
 }
 
 // Init
+try { SESION = JSON.parse(localStorage.getItem('jl_enc_sesion') || 'null'); } catch(e) { SESION = null; }
+if (SESION) mostrarApp();
+// Reintento automático cada minuto si quedó algo pendiente
+setInterval(function() { if (getPendientes().length && DB && fbConectado) syncPending(); }, 60000);
+// Funciona sin internet: guarda la app en el celular (service worker)
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', function() { navigator.serviceWorker.register('sw-encargado.js').catch(function() {}); });
+}
 updateOnlineBadge();
 cargarDatos();
 renderPendientes();
-if (isOnline) syncPending();
+if (DB) syncPending();
+setTimeout(encVerificarSesion, 1500);
 </script>
 </body>
 </html>
